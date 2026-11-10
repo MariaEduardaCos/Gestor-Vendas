@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ConsultoraSync — Conferência de Caixa (Leitor Contínuo / Zero Cliques)</title>
+  <style>
+    /*
+      Governed by DESIGN.md:
+      - colors: surface-base (#FBF9F6), brand-primary (#BD5338), status-available (#1B7340), status-reserved (#B26200), ink-primary (#1F1E1C)
+      - typography: Plus Jakarta Sans / system-ui, 40+ readability floor (15px-17px body, touch-targets 48px min)
+      - EXPERIENCE.md: S5 (Conferência de Caixa com Câmera Auto-Start) + S6 (Destinação) + Jornada 1
+    */
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; }
+    body { background-color: #EFECE6; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; color: #1F1E1C; }
+    
+    /* Device Frame - Mobile (390px x 844px) */
+    .device { width: 100%; max-width: 412px; background: #FBF9F6; border-radius: 36px; box-shadow: 0 20px 40px rgba(0,0,0,0.15); border: 8px solid #2B2A28; overflow: hidden; display: flex; flex-direction: column; min-height: 840px; position: relative; }
+    
+    /* Header */
+    .app-header { background: #FFFFFF; padding: 16px 20px; border-bottom: 1px solid #E7E2DA; display: flex; align-items: center; justify-content: space-between; z-index: 10; }
+    .header-title { font-size: 18px; font-weight: 700; color: #1F1E1C; }
+    .btn-back { background: none; border: none; font-size: 16px; color: #BD5338; font-weight: 600; cursor: pointer; padding: 8px; }
+    .live-badge { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: #1B7340; background: #EAF6EE; padding: 4px 10px; border-radius: 20px; }
+    .live-dot { width: 8px; height: 8px; background: #1B7340; border-radius: 50%; }
+
+    /* Live Camera Viewfinder (Zero Cliques - Já Inicia Ativo) */
+    .camera-viewport { position: relative; width: 100%; height: 210px; background: #1A1A18; overflow: hidden; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+    .camera-feed-sim { position: absolute; inset: 0; opacity: 0.35; background: radial-gradient(circle at center, #4A4A45 0%, #1A1A18 100%); }
+    .scan-target { position: relative; width: 220px; height: 110px; border: 2px dashed #BD5338; border-radius: 12px; display: flex; align-items: center; justify-content: center; z-index: 2; }
+    .scan-laser { position: absolute; width: 100%; height: 2px; background: #FF4726; box-shadow: 0 0 8px #FF4726; top: 50%; }
+    .camera-hint { position: absolute; bottom: 10px; background: rgba(0,0,0,0.65); color: #FFFFFF; font-size: 13px; font-weight: 600; padding: 4px 12px; border-radius: 20px; z-index: 2; }
+
+    /* Manual Search Alternative (Discreto) */
+    .manual-bar { padding: 10px 18px; background: #F3EFEA; border-bottom: 1px solid #E7E2DA; display: flex; align-items: center; gap: 8px; }
+    .manual-input { flex: 1; padding: 10px 14px; border: 1px solid #C9C2B7; border-radius: 8px; font-size: 14px; background: #FFFFFF; color: #1F1E1C; }
+    
+    /* Main Content */
+    .content { padding: 16px 18px; flex: 1; display: flex; flex-direction: column; gap: 14px; }
+
+    /* Scanned Product Card */
+    .product-scanned-card { background: #FFFFFF; border: 1px solid #E7E2DA; border-radius: 16px; padding: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); }
+    .bip-feedback { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .brand-tag { font-size: 12px; font-weight: 700; color: #BD5338; text-transform: uppercase; letter-spacing: 0.5px; }
+    .bip-status { font-size: 12px; font-weight: 700; color: #1B7340; background: #EAF6EE; padding: 2px 8px; border-radius: 12px; }
+    .prod-name { font-size: 17px; font-weight: 700; color: #1F1E1C; margin: 2px 0 8px 0; }
+    .barcode-pill { display: inline-block; background: #F3EFEA; color: #5C5852; font-size: 13px; font-weight: 600; padding: 3px 8px; border-radius: 12px; }
+
+    /* Hero Allocation Box */
+    .allocation-box { background: #FEF6E8; border: 1.5px solid #B26200; border-radius: 14px; padding: 14px; margin-top: 10px; }
+    .allocation-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .allocation-title { font-size: 16px; font-weight: 700; color: #8C4D00; }
+    .allocation-desc { font-size: 14px; color: #5C5852; line-height: 19px; margin-bottom: 12px; }
+    
+    /* Allocation Buttons */
+    .alloc-options { display: flex; flex-direction: column; gap: 8px; }
+    .btn-alloc-client { background: #FFFFFF; border: 1.5px solid #B26200; border-radius: 10px; padding: 12px; text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center; min-height: 48px; }
+    .btn-alloc-client:hover { background: #FEF3DF; }
+    .alloc-client-name { font-size: 15px; font-weight: 700; color: #1F1E1C; }
+    .alloc-client-meta { font-size: 12px; color: #8C4D00; font-weight: 700; }
+    
+    .btn-alloc-pronta { background: #EAF6EE; border: 1.5px solid #1B7340; border-radius: 10px; padding: 12px; text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center; min-height: 48px; }
+    .alloc-pronta-title { font-size: 15px; font-weight: 700; color: #1B7340; }
+    .alloc-pronta-meta { font-size: 12px; color: #1B7340; }
+
+    /* Bottom Status Counter */
+    .summary-card { background: #FFFFFF; border: 1px solid #E7E2DA; border-radius: 12px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; margin-top: auto; }
+    .summary-label { font-size: 14px; color: #5C5852; }
+    .summary-val { font-size: 16px; font-weight: 700; color: #1F1E1C; }
+  </style>
+</head>
+<body>
+  <div class="device">
+    <!-- Header -->
+    <header class="app-header">
+      <button class="btn-back">← Voltar</button>
+      <h1 class="header-title">Conferir Caixa</h1>
+      <div class="live-badge">
+        <div class="live-dot"></div>
+        <span>Câmera Ativa</span>
+      </div>
+    </header>
+
+    <!-- Zero-Click Auto-Start Viewfinder -->
+    <div class="camera-viewport">
+      <div class="camera-feed-sim"></div>
+      <div class="scan-target">
+        <div class="scan-laser"></div>
+      </div>
+      <div class="camera-hint">⚡ Aponte para o código do frasco</div>
+    </div>
+
+    <!-- Manual Code Fallback -->
+    <div class="manual-bar">
+      <input type="text" class="manual-input" placeholder="Ou digite o código/nome do produto..." value="7891033458921">
+    </div>
+
+    <!-- Main -->
+    <main class="content">
+      <!-- Scanned Item Card -->
+      <section class="product-scanned-card">
+        <div class="bip-feedback">
+          <span class="brand-tag">Natura • Tododia</span>
+          <span class="bip-status">✓ Reconhecido</span>
+        </div>
+        <h2 class="prod-name">Desodorante Hidratante Algodão 400ml</h2>
+        <span class="barcode-pill">EAN: 7891033458921</span>
+
+        <!-- Hero Allocation Decision Box -->
+        <div class="allocation-box">
+          <div class="allocation-header">
+            <span>📦</span>
+            <span class="allocation-title">Para quem é este produto?</span>
+          </div>
+          <p class="allocation-desc">Toque no nome para separar agora. O visor acima continua pronto para o próximo frasco:</p>
+          
+          <div class="alloc-options">
+            <div class="btn-alloc-client">
+              <div>
+                <div class="alloc-client-name">Separar para Ana</div>
+                <div style="font-size: 12px; color: #5C5852;">Encomenda de 05/11 (1 un aguardando)</div>
+              </div>
+              <span class="alloc-client-meta">Reservar →</span>
+            </div>
+
+            <div class="btn-alloc-client">
+              <div>
+                <div class="alloc-client-name">Separar para Bia</div>
+                <div style="font-size: 12px; color: #5C5852;">Encomenda de 07/11 (1 un aguardando)</div>
+              </div>
+              <span class="alloc-client-meta">Reservar →</span>
+            </div>
+
+            <div class="btn-alloc-pronta">
+              <div>
+                <div class="alloc-pronta-title">Colocar na Pronta-Entrega</div>
+                <div class="alloc-pronta-meta">Disponível para qualquer cliente</div>
+              </div>
+              <span style="font-weight: 700; color: #1B7340; font-size: 13px;">+1 Livre</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Bottom Progress Tracker -->
+      <div class="summary-card">
+        <span class="summary-label">Itens conferidos nesta caixa:</span>
+        <span class="summary-val">3 de 3 frascos</span>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

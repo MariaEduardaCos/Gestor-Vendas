@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ConsultoraSync — Conferência de Caixa e Destinação de Estoque</title>
+  <style>
+    /*
+      Governed by DESIGN.md:
+      - colors: surface-base (#FBF9F6), brand-primary (#BD5338), status-available (#1B7340), status-reserved (#B26200), ink-primary (#1F1E1C)
+      - typography: Plus Jakarta Sans / system-ui, 40+ readability floor (15px-17px body, touch-targets 48px min)
+      - EXPERIENCE.md: S5 (Conferência de Caixa) + S6 (Modal de Destinação) + Jornada 1
+    */
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; }
+    body { background-color: #EFECE6; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; color: #1F1E1C; }
+    
+    /* Device Frame - Mobile (390px x 844px) */
+    .device { width: 100%; max-width: 412px; background: #FBF9F6; border-radius: 36px; box-shadow: 0 20px 40px rgba(0,0,0,0.15); border: 8px solid #2B2A28; overflow: hidden; display: flex; flex-direction: column; min-height: 820px; position: relative; }
+    
+    /* Header */
+    .app-header { background: #FFFFFF; padding: 16px 20px; border-bottom: 1px solid #E7E2DA; display: flex; align-items: center; justify-content: space-between; }
+    .header-title { font-size: 18px; font-weight: 700; color: #1F1E1C; }
+    .btn-back { background: none; border: none; font-size: 16px; color: #BD5338; font-weight: 600; cursor: pointer; padding: 8px; }
+    
+    /* Main Content */
+    .content { padding: 18px; flex: 1; display: flex; flex-direction: column; gap: 16px; }
+    
+    /* Barcode Scanner Box */
+    .scanner-card { background: #FFFFFF; border: 1.5px dashed #BD5338; border-radius: 16px; padding: 18px; text-align: center; }
+    .scanner-icon { font-size: 32px; margin-bottom: 8px; }
+    .scanner-title { font-size: 17px; font-weight: 700; color: #1F1E1C; margin-bottom: 4px; }
+    .scanner-desc { font-size: 14px; color: #5C5852; margin-bottom: 12px; }
+    .btn-cam { background: #BD5338; color: #FFFFFF; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; padding: 14px 20px; width: 100%; min-height: 48px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .manual-input { width: 100%; margin-top: 10px; padding: 12px 14px; border: 1px solid #C9C2B7; border-radius: 10px; font-size: 15px; color: #1F1E1C; background: #FDFDFD; }
+
+    /* Hero Scanned Product Card */
+    .product-scanned-card { background: #FFFFFF; border: 1px solid #E7E2DA; border-radius: 16px; padding: 16px; }
+    .brand-tag { font-size: 12px; font-weight: 700; color: #BD5338; text-transform: uppercase; letter-spacing: 0.5px; }
+    .prod-name { font-size: 18px; font-weight: 700; color: #1F1E1C; margin: 4px 0 8px 0; }
+    .barcode-pill { display: inline-block; background: #F3EFEA; color: #5C5852; font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 20px; }
+
+    /* Allocation Decision Banner (Hero Interaction) */
+    .allocation-box { background: #FEF6E8; border: 1.5px solid #B26200; border-radius: 16px; padding: 16px; margin-top: 12px; }
+    .allocation-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .allocation-icon { font-size: 20px; }
+    .allocation-title { font-size: 16px; font-weight: 700; color: #8C4D00; }
+    .allocation-desc { font-size: 14px; color: #5C5852; line-height: 20px; margin-bottom: 14px; }
+    
+    /* Allocation Buttons */
+    .alloc-options { display: flex; flex-direction: column; gap: 10px; }
+    .btn-alloc-client { background: #FFFFFF; border: 1.5px solid #B26200; border-radius: 12px; padding: 14px; text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center; min-height: 48px; }
+    .btn-alloc-client:hover { background: #FEF3DF; }
+    .alloc-client-name { font-size: 16px; font-weight: 700; color: #1F1E1C; }
+    .alloc-client-meta { font-size: 13px; color: #8C4D00; font-weight: 600; }
+    .btn-alloc-pronta { background: #EAF6EE; border: 1.5px solid #1B7340; border-radius: 12px; padding: 14px; text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center; min-height: 48px; }
+    .alloc-pronta-title { font-size: 16px; font-weight: 700; color: #1B7340; }
+    .alloc-pronta-meta { font-size: 13px; color: #1B7340; }
+
+    /* Counter Bar */
+    .summary-card { background: #FFFFFF; border: 1px solid #E7E2DA; border-radius: 14px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; margin-top: auto; }
+    .summary-label { font-size: 15px; color: #5C5852; }
+    .summary-val { font-size: 18px; font-weight: 700; color: #1F1E1C; }
+  </style>
+</head>
+<body>
+  <div class="device">
+    <!-- Header -->
+    <header class="app-header">
+      <button class="btn-back">← Voltar</button>
+      <h1 class="header-title">Conferir Caixa da Marca</h1>
+      <span style="font-size: 13px; font-weight: 600; color: #1B7340;">Online</span>
+    </header>
+
+    <!-- Main -->
+    <main class="content">
+      <!-- Scanner / Input -->
+      <section class="scanner-card">
+        <div class="scanner-icon">📷</div>
+        <h2 class="scanner-title">Bipar Produto da Caixa</h2>
+        <p class="scanner-desc">Aponte a câmera para o código de barras do frasco</p>
+        <button class="btn-cam">📸 Abrir Câmera do Celular</button>
+        <input type="text" class="manual-input" placeholder="Ou digite o código (ex: 789123...)" value="7891033458921">
+      </section>
+
+      <!-- Scanned Item -->
+      <section class="product-scanned-card">
+        <span class="brand-tag">Natura • Tododia</span>
+        <h3 class="prod-name">Desodorante Hidratante Algodão 400ml</h3>
+        <span class="barcode-pill">EAN: 7891033458921</span>
+
+        <!-- Hero Allocation Box -->
+        <div class="allocation-box">
+          <div class="allocation-header">
+            <span class="allocation-icon">📦</span>
+            <span class="allocation-title">Para quem é este produto?</span>
+          </div>
+          <p class="allocation-desc">Você tem clientes aguardando esta encomenda. Toque para separar agora:</p>
+          
+          <div class="alloc-options">
+            <div class="btn-alloc-client">
+              <div>
+                <div class="alloc-client-name">Separar para Ana</div>
+                <div style="font-size: 13px; color: #5C5852;">Encomenda feita em 05/11 (1 un aguardando)</div>
+              </div>
+              <span class="alloc-client-meta">Reservar →</span>
+            </div>
+
+            <div class="btn-alloc-client">
+              <div>
+                <div class="alloc-client-name">Separar para Bia</div>
+                <div style="font-size: 13px; color: #5C5852;">Encomenda feita em 07/11 (1 un aguardando)</div>
+              </div>
+              <span class="alloc-client-meta">Reservar →</span>
+            </div>
+
+            <div class="btn-alloc-pronta">
+              <div>
+                <div class="alloc-pronta-title">Colocar na Pronta-Entrega</div>
+                <div class="alloc-pronta-meta">Disponível para venda imediata</div>
+              </div>
+              <span style="font-weight: 700; color: #1B7340;">+1 Livre</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Summary -->
+      <div class="summary-card">
+        <span class="summary-label">Itens conferidos nesta caixa:</span>
+        <span class="summary-val">3 de 3 unidades</span>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

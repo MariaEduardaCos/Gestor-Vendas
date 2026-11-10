@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ConsultoraSync — Lista de Clientes e Cadastro Rápido</title>
+  <style>
+    /*
+      Governed by DESIGN.md:
+      - colors: surface-base (#FBF9F6), brand-primary (#BD5338), ink-primary (#1F1E1C), border-hairline (#E7E2DA)
+      - typography: Plus Jakarta Sans / system-ui, 40+ readability floor
+      - EXPERIENCE.md: S2 (Ficha de Clientes) + S3 (Gaveta de Cadastro Rápido)
+    */
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; }
+    body { background-color: #EFECE6; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; color: #1F1E1C; }
+    
+    /* Device Frame */
+    .device { width: 100%; max-width: 412px; background: #FBF9F6; border-radius: 36px; box-shadow: 0 20px 40px rgba(0,0,0,0.15); border: 8px solid #2B2A28; overflow: hidden; display: flex; flex-direction: column; min-height: 820px; position: relative; }
+    
+    /* Header */
+    .app-header { background: #FFFFFF; padding: 16px 20px; border-bottom: 1px solid #E7E2DA; display: flex; align-items: center; justify-content: space-between; }
+    .header-title { font-size: 20px; font-weight: 700; color: #1F1E1C; }
+    
+    /* Content Behind */
+    .content { padding: 18px; flex: 1; display: flex; flex-direction: column; gap: 14px; opacity: 0.35; pointer-events: none; }
+    .search-box { width: 100%; padding: 14px 16px; border: 1px solid #C9C2B7; border-radius: 12px; font-size: 16px; background: #FFFFFF; }
+    .client-card { background: #FFFFFF; border: 1px solid #E7E2DA; border-radius: 14px; padding: 16px; display: flex; justify-content: space-between; align-items: center; }
+    
+    /* Backdrop & Bottom Sheet Modal (Drawer) */
+    .drawer-backdrop { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(31, 30, 28, 0.45); display: flex; flex-direction: column; justify-content: flex-end; }
+    .drawer { background: #FFFFFF; border-top-left-radius: 24px; border-top-right-radius: 24px; padding: 24px 20px 28px 20px; box-shadow: 0 -8px 30px rgba(0,0,0,0.18); display: flex; flex-direction: column; gap: 18px; }
+    
+    .drawer-handle { width: 44px; height: 5px; background: #C9C2B7; border-radius: 10px; align-self: center; margin-bottom: 4px; }
+    .drawer-header { display: flex; justify-content: space-between; align-items: center; }
+    .drawer-title { font-size: 20px; font-weight: 700; color: #1F1E1C; }
+    .btn-close { background: none; border: none; font-size: 22px; color: #5C5852; cursor: pointer; padding: 4px 8px; }
+
+    /* Form Fields - 40+ Ergonomics */
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-label { font-size: 15px; font-weight: 600; color: #1F1E1C; }
+    .form-label span { color: #BD5338; }
+    .form-input { width: 100%; min-height: 48px; padding: 12px 14px; border: 1.5px solid #C9C2B7; border-radius: 10px; font-size: 16px; color: #1F1E1C; background: #FAF9F7; }
+    .form-input:focus { outline: none; border-color: #BD5338; background: #FFFFFF; }
+    .form-hint { font-size: 13px; color: #5C5852; }
+
+    /* Action Buttons */
+    .btn-submit { background: #BD5338; color: #FFFFFF; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; padding: 14px 20px; min-height: 50px; cursor: pointer; width: 100%; margin-top: 8px; }
+    .btn-cancel { background: none; border: none; color: #5C5852; font-size: 15px; font-weight: 600; padding: 10px; cursor: pointer; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="device">
+    <!-- Header -->
+    <header class="app-header">
+      <h1 class="header-title">Minhas Clientes</h1>
+      <span style="font-size: 14px; font-weight: 600; color: #BD5338;">2 cadastradas</span>
+    </header>
+
+    <!-- Content (Obscured by Drawer) -->
+    <main class="content">
+      <input type="text" class="search-box" placeholder="Buscar por nome da cliente..." value="">
+      <div class="client-card">
+        <div>
+          <div style="font-weight: 700; font-size: 17px;">Ana Paula Silva</div>
+          <div style="font-size: 14px; color: #5C5852;">1 item reservado aguardando entrega</div>
+        </div>
+        <span style="color: #B26200; font-weight: 700;">Ver Ficha →</span>
+      </div>
+      <div class="client-card">
+        <div>
+          <div style="font-weight: 700; font-size: 17px;">Bia Santos</div>
+          <div style="font-size: 14px; color: #5C5852;">1 item aguardando fábrica</div>
+        </div>
+        <span style="color: #2C5E8A; font-weight: 700;">Ver Ficha →</span>
+      </div>
+    </main>
+
+    <!-- Bottom Sheet Modal (Drawer) -->
+    <div class="drawer-backdrop">
+      <section class="drawer">
+        <div class="drawer-handle"></div>
+        <div class="drawer-header">
+          <h2 class="drawer-title">+ Cadastrar Nova Cliente</h2>
+          <button class="btn-close">✕</button>
+        </div>
+
+        <p style="font-size: 14px; color: #5C5852; line-height: 20px;">
+          Rápido e simples: você só precisa do nome para já poder registrar encomendas e vendas.
+        </p>
+
+        <div class="form-group">
+          <label class="form-label">Nome Completo da Cliente <span>*</span></label>
+          <input type="text" class="form-input" placeholder="Ex: Carla Vizinha" value="Carla Vizinha" autofocus>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">WhatsApp ou Telefone (opcional)</label>
+          <input type="tel" class="form-input" placeholder="(64) 99999-0000" value="(64) 99876-5432">
+          <span class="form-hint">Útil para enviar avisos de quando a encomenda chegar.</span>
+        </div>
+
+        <button class="btn-submit">Salvar Cliente e Continuar</button>
+        <button class="btn-cancel">Cancelar</button>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,72 @@
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created, ready for development
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when its first story starts (via build's sprint sync)
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates the next story after the previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; the status view surfaces open ones
+generated: 11-10-2026 19:26
+last_updated: 11-10-2026 19:26
+project: Prototipo TCC
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+development_status:
+  epic-1: backlog
+  1-1-inicialização-do-monorepo-sessão-operacional-e-isolamento-mu: backlog
+  1-2-cadastro-edição-e-ficha-de-clientes-com-gaveta-rápida: backlog
+  1-3-catálogo-de-produtos-variantes-preço-de-venda-e-custo-por-ma: backlog
+  1-4-lançamento-de-estoque-inicial-por-produto: backlog
+  1-5-visor-de-leitura-híbrido-com-câmera-contínua-e-filtro-anti-d: backlog
+  1-6-pareamento-efêmero-celular-computador-com-websocket-e-feedba: backlog
+  epic-1-retrospective: optional
+
+  epic-2: backlog
+  2-1-registro-de-encomenda-individual-por-cliente-e-criação-da-co: backlog
+  2-2-consolidação-da-compra-à-marca-e-separação-entre-clientes-e: backlog
+  2-3-imutabilidade-e-congelamento-de-preço-de-venda-e-custo-histó: backlog
+  epic-2-retrospective: optional
+
+  epic-3: backlog
+  3-1-abertura-da-conferência-de-caixa-e-leitura-com-idempotência: backlog
+  3-2-modal-de-destinação-mandatória-e-criação-de-reserva-física: backlog
+  3-3-recebimento-parcial-e-tratamento-de-falta-da-fábrica: backlog
+  epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-consulta-do-estoque-com-pílulas-multistatus-coloridas: backlog
+  4-2-venda-de-pronta-entrega-com-bloqueio-de-concorrência-e-reser: backlog
+  4-3-confirmação-de-entrega-física-total-e-parcial-com-baixa-do-e: backlog
+  4-4-cancelamento-com-liberação-de-reserva-e-ajuste-justificado-d: backlog
+  epic-4-retrospective: optional
+
+  epic-5: backlog
+  5-1-saldo-individual-por-conta-e-projeção-da-visão-sem-itens-agu: backlog
+  5-2-registro-de-pagamento-em-dinheiro-pix-ou-cartão-com-taxa-abs: backlog
+  5-3-estorno-auditado-de-pagamento-com-recalculo-de-saldo: backlog
+  5-4-gestão-de-excedente-por-cancelamento-devolução-financeira-e: backlog
+  5-5-painel-consolidado-de-vendas-recebimentos-e-saldos-segregado: backlog
+  epic-5-retrospective: optional

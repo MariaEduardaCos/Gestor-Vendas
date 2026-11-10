@@ -1,0 +1,57 @@
+ID	Etapa	Título
+FR-001	T1	Identificação de quem opera
+FR-002	T1	Limites por operação
+FR-003	T1	Cadastro de clientes
+FR-004	T1	Perfil do cliente
+FR-005	P2	Pessoa contratada
+FR-006	T1	Produto e variante
+FR-007	T1	Leitura de código
+FR-008	T1	Código não cadastrado
+FR-009	T1	Evitar leituras duplicadas
+FR-010	T1	Preço de venda
+FR-011	T1	Percentual por marca
+FR-012	T1	Proveniência de custo
+FR-013	T1	Estoque inicial
+FR-014	T1	Leitor pareado
+FR-015	T1	Encomenda por cliente
+FR-016	T1	Confirmação da conta
+FR-017	T1	Compra à marca
+FR-018	T1	Vínculos e recebimentos
+FR-019	T1	Preço histórico
+FR-020	T1	Conferência de chegada
+FR-021	T1	Recebimento parcial
+FR-022	T1	Destinação quando falta
+FR-023	T1	Reserva física
+FR-024	T1	Item não entregável
+FR-025	T1	Consulta do estoque
+FR-026	T1	Reserva na venda
+FR-027	T1	Saída na entrega
+FR-028	T1	Entrega parcial
+FR-029	T1	Cancelamento e reserva
+FR-030	T1	Ajuste e correção
+FR-031	T1	Estado de entrega
+FR-032	T1	Saldo por compra
+FR-033	T1	Visão sem pendentes
+FR-034	T1	Registrar pagamento
+FR-035	T1	Cartão e taxa
+FR-036	T1	Datas e situação
+FR-037	T1	Correção de pagamento
+FR-038	T1	Excedente por cancelamento
+FR-039	T1	Devolução financeira
+FR-040	T1	Crédito de cliente
+FR-041	T1	Separar venda e recebimento
+FR-042	P2	Boleto por compra
+FR-043	P2	Pagamento de boleto
+FR-044	P2	Resumo financeiro
+FR-045	P2	Ganho calculável
+FR-046	P2	Custo desconhecido
+FR-047	P2	Taxas no ganho
+FR-048	P2	Ajustes no ganho
+FR-049	P2	Recorrência no perfil
+FR-050	P2	Validade opcional
+FR-051	P2	Produto vencido
+FR-052	INV	Dados externos
+FR-053	INV	Referências de preço
+FR-054	INV	Importar documentos
+FR-055	INV	Enviar pedido à marca
+FR-056	P2	Percentual padrão de taxa

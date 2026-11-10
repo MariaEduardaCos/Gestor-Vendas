@@ -1,0 +1,11 @@
+{
+  "bmad-loop": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "/home/duda/.local/bin/bmad-loop relay Stop",
+        "timeout": 60
+      }
+    ]
+  }
+}
