@@ -2,7 +2,8 @@
 title: 'Story 1.1: Inicialização do Monorepo, Sessão Operacional e Isolamento Multi-inquilino'
 type: 'feature'
 created: '2026-11-10'
-status: 'ready-for-dev'
+status: 'done'
+baseline_commit: '735221676e9ab66e3a85e190a499897f633b61be'
 route: 'dispatch'
 review_loop_iteration: 0
 context:
@@ -65,20 +66,26 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `package.json` e `tsconfig.base.json` -- Configurar monorepo e referências TypeScript -- Estabelecer a fundação do monorepo.
-- [ ] `packages/core` -- Criar entidades e tipos puros de `Operacao`, `Operador` e `Sessao` -- Isolar regras de negócio.
-- [ ] `packages/server/prisma/schema.prisma` -- Modelar `Operacao`, `Operador` e `RegistroAuditoria` em SQLite -- Suporte ao banco relacional local.
-- [ ] `packages/server/src/db/tenant-prisma.ts` -- Criar middleware/extensão Prisma para filtro mandatório por `operacao_id` -- Garantir barreira multi-inquilino (NFR-002).
-- [ ] `packages/server/src/plugins/session.ts` -- Criar middleware Fastify para extrair e validar `operacao_id` e `operador` -- Segurança de sessão (FR-001).
-- [ ] `packages/server/src/routes/auth.ts` -- Implementar endpoints de login e validação de sessão -- Autenticação operacional.
-- [ ] `packages/server/tests/isolation.test.ts` -- Escrever testes automatizados de tentativa de vazamento entre tenants -- Validar aceitação da história.
-- [ ] `packages/web` -- Configurar scaffold Vite + React + Tailwind com design tokens do `DESIGN.md` -- Fundação da interface.
+- [x] `package.json` e `tsconfig.base.json` -- Configurar monorepo e referências TypeScript -- Estabelecer a fundação do monorepo.
+- [x] `packages/core` -- Criar entidades e tipos puros de `Operacao`, `Operador` e `Sessao` -- Isolar regras de negócio.
+- [x] `packages/server/prisma/schema.prisma` -- Modelar `Operacao`, `Operador` e `RegistroAuditoria` em SQLite -- Suporte ao banco relacional local.
+- [x] `packages/server/src/db/tenant-prisma.ts` -- Criar middleware/extensão Prisma para filtro mandatório por `operacao_id` -- Garantir barreira multi-inquilino (NFR-002).
+- [x] `packages/server/src/plugins/session.ts` -- Criar middleware Fastify para extrair e validar `operacao_id` e `operador` -- Segurança de sessão (FR-001).
+- [x] `packages/server/src/routes/auth.ts` -- Implementar endpoints de login e validação de sessão -- Autenticação operacional.
+- [x] `packages/server/tests/isolation.test.ts` -- Escrever testes automatizados de tentativa de vazamento entre tenants -- Validar aceitação da história.
+- [x] `packages/web` -- Configurar scaffold Vite + React + Tailwind com design tokens do `DESIGN.md` -- Fundação da interface.
 
 **Acceptance Criteria:**
 - Given o monorepo TypeScript inicializado (`packages/core`, `packages/server` com Fastify e Prisma/SQLite, `packages/web` com Vite/React/Tailwind e tokens de `DESIGN.md`), when um usuário realiza login com suas credenciais de operador, then uma sessão segura com `operacao_id`, `operador_id` e `operador_nome` é estabelecida, and todas as consultas e mutações ao banco aplicam filtro estrito por `operacao_id`, impedindo acesso a dados de outra operação mesmo que os IDs sejam conhecidos (FR-001, FR-002, AD-1, NFR-002).
 - Given uma usuária autenticada como "Dona Sônia", when qualquer registro ou transação for confirmado no sistema, then a resposta e o registro no banco incluem `operador_id` e `operador_nome` com timestamp ISO-8601 UTC (NFR-003).
 
 ## Implementation Notes
+
+- Monorepo configurado com npm workspaces cobrindo `packages/core`, `packages/server` e `packages/web`.
+- `packages/core`: Implementados domínio puro de `Operacao`, `Operador`, `SessaoOperacional`, `RegistroAuditoria`, value objects `Centavos` (impossibilita ponto flutuante) e `gerarUuidV7`, além de padronização RFC 7807 (`ProblemDetails`).
+- `packages/server`: Backend Fastify 5 com SQLite e Prisma ORM. A extensão `createTenantPrisma` intercepta e força injeção de `operacao_id` em consultas e mutações; o plugin `sessionPlugin` valida tokens assinados com HMAC-SHA256 e provê `requireSession`; rotas de autenticação e operações foram implementadas.
+- `packages/web`: Scaffold Vite + React 19 + Tailwind CSS configurado rigorosamente com os design tokens de `DESIGN.md` (cores acolhedoras, contraste >= 10:1, alvos de toque >= 48px).
+- Testes automatizados cobrem unitariamente o núcleo e ponta a ponta a barreira multi-inquilino (`isolation.test.ts`), garantindo rejeição 401 para rotas sem sessão e 404 para tentativas de acesso cruzado a IDs de outros tenants.
 
 ## Spec Change Log
 

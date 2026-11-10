@@ -1,0 +1,65 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Operacao {
+  id        String   @id
+  nome      String
+  criado_em DateTime @default(now())
+
+  operadores       Operador[]
+  registros_audit  RegistroAuditoria[]
+  recursos_exemplo RecursoExemplo[]
+
+  @@map("operacoes")
+}
+
+model Operador {
+  id          String   @id
+  operacao_id String
+  nome        String
+  pin_hash    String?
+  ativo       Boolean  @default(true)
+  criado_em   DateTime @default(now())
+
+  operacao        Operacao            @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+  registros_audit RegistroAuditoria[]
+
+  @@index([operacao_id])
+  @@map("operadores")
+}
+
+model RegistroAuditoria {
+  id            String   @id
+  operacao_id   String
+  operador_id   String
+  operador_nome String
+  acao          String
+  detalhes      String?
+  criado_em     DateTime @default(now())
+
+  operacao Operacao @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+  operador Operador @relation(fields: [operador_id], references: [id], onDelete: Restrict)
+
+  @@index([operacao_id])
+  @@index([operador_id])
+  @@map("registros_auditoria")
+}
+
+model RecursoExemplo {
+  id          String   @id
+  operacao_id String
+  titulo      String
+  descricao   String?
+  criado_em   DateTime @default(now())
+
+  operacao Operacao @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+
+  @@index([operacao_id])
+  @@map("recursos_exemplo")
+}

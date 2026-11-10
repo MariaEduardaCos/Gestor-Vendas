@@ -2,3 +2,16 @@
 .bmad-loop/cache/
 .bmad-loop/policy.toml
 _bmad/render/
+
+# Dependencies & Build
+node_modules/
+dist/
+.turbo/
+
+# Environment & Databases
+.env
+.env.local
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

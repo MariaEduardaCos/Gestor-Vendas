@@ -1,0 +1,66 @@
+import fastify, { FastifyInstance, FastifyError } from 'fastify';
+import cors from '@fastify/cors';
+import { PrismaClient } from '@prisma/client';
+import { createProblemDetails, DomainError } from '@consultorasync/core';
+import { sessionPlugin } from './plugins/session.js';
+import { authRoutes } from './routes/auth.js';
+import { operacionalRoutes } from './routes/operacional.js';
+
+export interface BuildAppOptions {
+  prisma?: PrismaClient;
+}
+
+export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
+  const app = fastify({
+    logger: process.env.NODE_ENV === 'test' ? false : true
+  });
+
+  const prisma = options.prisma ?? new PrismaClient();
+  app.decorate('prisma', prisma);
+
+  // CORS
+  app.register(cors, {
+    origin: true,
+    credentials: true
+  });
+
+  // Session Plugin
+  app.register(sessionPlugin);
+
+  // Routes
+  app.register(authRoutes);
+  app.register(operacionalRoutes);
+
+  // Global Error Handler conforme RFC 7807
+  app.setErrorHandler((error: FastifyError | Error, request, reply) => {
+    reply.type('application/problem+json');
+
+    if (error instanceof DomainError) {
+      return reply.status(error.problem.status).send(error.problem);
+    }
+
+    const fastifyError = error as FastifyError;
+    if (fastifyError.statusCode) {
+      return reply.status(fastifyError.statusCode).send(
+        createProblemDetails(
+          fastifyError.statusCode,
+          fastifyError.code || 'HTTP_ERROR',
+          fastifyError.name || 'Erro HTTP',
+          fastifyError.message
+        )
+      );
+    }
+
+    // Erros não tratados
+    return reply.status(500).send(
+      createProblemDetails(
+        500,
+        'INTERNAL_SERVER_ERROR',
+        'Erro Interno do Servidor',
+        'Ocorreu um erro inesperado durante a execução da operação.'
+      )
+    );
+  });
+
+  return app;
+}
