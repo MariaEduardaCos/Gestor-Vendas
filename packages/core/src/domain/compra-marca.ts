@@ -122,6 +122,35 @@ export class ItemCompraMarca {
     return this.quantidade * this.custoUnitarioCentavos;
   }
 
+  public get pendenteRecebimento(): number {
+    return Math.max(0, this.quantidade - this.quantidadeRecebida);
+  }
+
+  public registrarRecebimento(qtd: number): void {
+    if (!Number.isInteger(qtd) || qtd <= 0) {
+      throw new DomainError(
+        createProblemDetails(
+          400,
+          'QUANTIDADE_INVALIDA',
+          'Quantidade Inválida',
+          'A quantidade recebida deve ser um número inteiro maior que zero.'
+        )
+      );
+    }
+    if (this.quantidadeRecebida + qtd > this.quantidade) {
+      throw new DomainError(
+        createProblemDetails(
+          400,
+          'EXCEDENTE_NAO_PERMITIDO',
+          'Quantidade Excedente Não Permitida',
+          `Não é permitido conferir ${qtd} unidade(s). O item possui quantidade máxima de ${this.quantidade} e já foram recebidas ${this.quantidadeRecebida}.`
+        )
+      );
+    }
+    this.quantidadeRecebida += qtd;
+    this.atualizadoEm = new Date().toISOString();
+  }
+
   public toJSON() {
     return {
       id: this.id,
@@ -282,6 +311,30 @@ export class CompraMarca {
     }
 
     return Array.from(mapa.values());
+  }
+
+  public get quantidadeTotalRecebida(): number {
+    return this.itens.reduce((acc, cur) => acc + cur.quantidadeRecebida, 0);
+  }
+
+  public get conferenciaCompleta(): boolean {
+    return this.itens.every((i) => i.quantidadeRecebida >= i.quantidade);
+  }
+
+  public conferirItem(itemId: string, qtd: number): void {
+    const item = this.itens.find((i) => i.id === itemId);
+    if (!item) {
+      throw new DomainError(
+        createProblemDetails(404, 'ITEM_NAO_ENCONTRADO', 'Item Não Encontrado', 'O item de compra informado não foi localizado.')
+      );
+    }
+    item.registrarRecebimento(qtd);
+    if (this.conferenciaCompleta) {
+      this.status = 'CONFERIDA';
+    } else {
+      this.status = 'CONFERENCIA_EM_ANDAMENTO';
+    }
+    this.atualizadoEm = new Date().toISOString();
   }
 
   public atualizarStatus(novoStatus: StatusCompraMarca): void {

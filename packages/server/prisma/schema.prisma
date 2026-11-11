@@ -25,6 +25,7 @@ model Operacao {
   itens_conta      ItemConta[]
   compras_marca    CompraMarca[]
   itens_compra_marca ItemCompraMarca[]
+  registros_idempotencia RegistroIdempotencia[]
 
   @@map("operacoes")
 }
@@ -284,6 +285,7 @@ model ItemCompraMarca {
   destinacao              String // "CLIENTE" | "PRONTA_ENTREGA"
   quantidade              Int
   quantidade_recebida     Int      @default(0)
+  quantidade_cancelada_falta Int   @default(0)
   cliente_id              String?
   encomenda_id            String?
   item_conta_id           String?
@@ -304,6 +306,23 @@ model ItemCompraMarca {
   @@index([cliente_id])
   @@index([encomenda_id])
   @@map("itens_compra_marca")
+}
+
+model RegistroIdempotencia {
+  id            String   @id
+  operacao_id   String
+  chave         String
+  recurso       String
+  status_code   Int
+  resposta_json String
+  criado_em     DateTime @default(now())
+
+  operacao Operacao @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+
+  @@unique([operacao_id, chave])
+  @@index([operacao_id])
+  @@index([operacao_id, chave])
+  @@map("registros_idempotencia")
 }
 
 

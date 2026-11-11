@@ -562,4 +562,742 @@ export const comprasRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
   );
+
+  // GET /api/compras-marca/:id/conferencia - Dados da compra para a conferência de caixa (FR-020, UX-DR2)
+  fastify.get<{ Params: { id: string } }>(
+    '/api/compras-marca/:id/conferencia',
+    { preHandler: fastify.requireSession },
+    async (request, reply) => {
+      const { id } = request.params;
+      const operacaoId = request.session!.operacaoId;
+
+      const compra = await request.tenantPrisma.compraMarca.findUnique({
+        where: { id: id.trim() },
+        include: {
+          marca: true,
+          itens: {
+            include: {
+              produto: true,
+              cliente: true
+            }
+          }
+        }
+      });
+
+      if (!compra) {
+        return reply.status(404).type('application/problem+json').send(
+          createProblemDetails(
+            404,
+            'COMPRA_NAO_ENCONTRADA',
+            'Compra Não Encontrada',
+            'O registro de compra informado não foi localizado nesta operação.'
+          )
+        );
+      }
+
+      if (compra.status === 'CANCELADA') {
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(
+            400,
+            'COMPRA_CANCELADA',
+            'Compra Cancelada',
+            'Não é possível conferir uma compra que foi cancelada.'
+          )
+        );
+      }
+
+      const itensConferencia = compra.itens.map((it) => {
+        const falta = it.quantidade_cancelada_falta || 0;
+        const pendente = Math.max(0, it.quantidade - it.quantidade_recebida - falta);
+        return {
+          item_compra_id: it.id,
+          produto_id: it.produto_id,
+          produto_nome: it.produto.nome,
+          variante: it.produto.variante,
+          codigo_barras: it.produto.codigo_barras,
+          destinacao: it.destinacao,
+          cliente_id: it.cliente_id,
+          cliente_nome: it.cliente?.nome || null,
+          encomenda_id: it.encomenda_id,
+          item_conta_id: it.item_conta_id,
+          quantidade_pedida: it.quantidade,
+          quantidade_recebida: it.quantidade_recebida,
+          quantidade_cancelada_falta: falta,
+          quantidade_pendente: pendente
+        };
+      });
+
+      return reply.send({
+        compra_id: compra.id,
+        marca_id: compra.marca_id,
+        marca_nome: compra.marca.nome,
+        numero_pedido: compra.numero_pedido,
+        status: compra.status,
+        data_pedido: compra.data_pedido.toISOString(),
+        total_itens_pedidos: compra.itens.reduce((acc, i) => acc + i.quantidade, 0),
+        total_itens_recebidos: compra.itens.reduce((acc, i) => acc + i.quantidade_recebida, 0),
+        total_itens_cancelados_falta: compra.itens.reduce((acc, i) => acc + (i.quantidade_cancelada_falta || 0), 0),
+        itens: itensConferencia
+      });
+    }
+  );
+
+  // POST /api/compras-marca/:id/conferencia - Confirmação de conferência com Idempotência (FR-020, AD-3, AD-7, NFR-001)
+  fastify.post<{
+    Params: { id: string };
+    Body: {
+      idempotency_key?: string;
+      itens_conferidos: Array<{
+        item_compra_id: string;
+        quantidade: number;
+        destinacao?: 'CLIENTE' | 'PRONTA_ENTREGA';
+        cliente_id?: string | null;
+        item_conta_id?: string | null;
+      }>;
+    };
+  }>(
+    '/api/compras-marca/:id/conferencia',
+    { preHandler: fastify.requireSession },
+    async (request, reply) => {
+      const { id } = request.params;
+      const session = request.session!;
+
+      // 1. Extração da Chave de Idempotência (AD-7)
+      const idempotencyKey =
+        request.body?.idempotency_key ||
+        (request.headers['idempotency-key'] as string) ||
+        (request.headers['x-idempotency-key'] as string);
+
+      if (!idempotencyKey || typeof idempotencyKey !== 'string' || idempotencyKey.trim().length === 0) {
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(
+            400,
+            'IDEMPOTENCY_KEY_OBRIGATORIA',
+            'Chave de Idempotência Obrigatória',
+            'A confirmação de conferência de caixa exige o envio de uma chave de idempotência válida (AD-7).'
+          )
+        );
+      }
+
+      const chaveNormalizada = idempotencyKey.trim();
+
+      // 2. Consulta prévia de Idempotência existente (AD-7, NFR-008)
+      const registroExistente = await request.tenantPrisma.registroIdempotencia.findUnique({
+        where: {
+          operacao_id_chave: {
+            operacao_id: session.operacaoId,
+            chave: chaveNormalizada
+          }
+        }
+      });
+
+      if (registroExistente) {
+        // Retorna a resposta previamente computada sem reexecutar mutações
+        return reply
+          .status(registroExistente.status_code)
+          .type('application/json')
+          .send(JSON.parse(registroExistente.resposta_json));
+      }
+
+      // 3. Validação da Compra
+      const compra = await request.tenantPrisma.compraMarca.findUnique({
+        where: { id: id.trim() },
+        include: {
+          marca: true,
+          itens: {
+            include: {
+              produto: true,
+              cliente: true
+            }
+          }
+        }
+      });
+
+      if (!compra) {
+        return reply.status(404).type('application/problem+json').send(
+          createProblemDetails(
+            404,
+            'COMPRA_NAO_ENCONTRADA',
+            'Compra Não Encontrada',
+            'A compra informada não foi localizada nesta operação.'
+          )
+        );
+      }
+
+      if (compra.status === 'CONFERIDA') {
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(
+            400,
+            'COMPRA_JA_CONFERIDA',
+            'Compra Já Conferida',
+            'Esta compra já foi totalmente conferida anteriormente.'
+          )
+        );
+      }
+
+      if (compra.status === 'CANCELADA') {
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(
+            400,
+            'COMPRA_CANCELADA',
+            'Compra Cancelada',
+            'Não é possível realizar conferência em compra cancelada.'
+          )
+        );
+      }
+
+      const { itens_conferidos } = request.body || {};
+      if (!Array.isArray(itens_conferidos) || itens_conferidos.length === 0) {
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(
+            400,
+            'ITENS_OBRIGATORIOS',
+            'Itens de Conferência Obrigatórios',
+            'Informe ao menos um item conferido na caixa.'
+          )
+        );
+      }
+
+      // 4. Validação de cada item conferido
+      const mapaItensCompra = new Map(compra.itens.map((it) => [it.id, it]));
+      const itensValidados: Array<{
+        itemCompra: typeof compra.itens[0];
+        quantidadeConferida: number;
+        destinacao: 'CLIENTE' | 'PRONTA_ENTREGA';
+        clienteId: string | null;
+        itemContaId: string | null;
+      }> = [];
+
+      for (const itemInput of itens_conferidos) {
+        if (!itemInput || !itemInput.item_compra_id) {
+          return reply.status(400).type('application/problem+json').send(
+            createProblemDetails(
+              400,
+              'ITEM_INVALIDO',
+              'Item Inválido',
+              'Cada item de conferência deve indicar o item_compra_id.'
+            )
+          );
+        }
+
+        const itemCompra = mapaItensCompra.get(itemInput.item_compra_id.trim());
+        if (!itemCompra) {
+          return reply.status(404).type('application/problem+json').send(
+            createProblemDetails(
+              404,
+              'ITEM_COMPRA_NAO_ENCONTRADO',
+              'Item Não Pertence a esta Compra',
+              `O item ${itemInput.item_compra_id} não pertence à compra informada.`
+            )
+          );
+        }
+
+        const qtd = itemInput.quantidade;
+        if (!Number.isInteger(qtd) || qtd <= 0) {
+          return reply.status(400).type('application/problem+json').send(
+            createProblemDetails(
+              400,
+              'QUANTIDADE_INVALIDA',
+              'Quantidade Inválida',
+              `A quantidade conferida para o produto "${itemCompra.produto.nome}" deve ser um número inteiro maior que zero.`
+            )
+          );
+        }
+
+        const pendente = itemCompra.quantidade - itemCompra.quantidade_recebida;
+        if (qtd > pendente) {
+          return reply.status(400).type('application/problem+json').send(
+            createProblemDetails(
+              400,
+              'EXCEDENTE_NAO_PERMITIDO',
+              'Quantidade Excedente Não Permitida',
+              `Não é permitido conferir ${qtd} un para "${itemCompra.produto.nome}". O saldo pendente da compra é de apenas ${pendente} un.`
+            )
+          );
+        }
+
+        const destinacaoFinal = itemInput.destinacao || (itemCompra.destinacao as any);
+        const clienteIdFinal = itemInput.cliente_id || itemCompra.cliente_id;
+        const itemContaIdFinal = itemInput.item_conta_id || itemCompra.item_conta_id;
+
+        itensValidados.push({
+          itemCompra,
+          quantidadeConferida: qtd,
+          destinacao: destinacaoFinal,
+          clienteId: clienteIdFinal,
+          itemContaId: itemContaIdFinal
+        });
+      }
+
+      // 5. Transação Atômica de Atualização de Estoque, Compra e Idempotência (AD-3, AD-7, NFR-001)
+      const resultadoConferencia = await (fastify.prisma as any).$transaction(async (tx: any) => {
+        const movimentacoesRegistradas: any[] = [];
+        const itensAtualizados: any[] = [];
+
+        for (const validado of itensValidados) {
+          const { itemCompra, quantidadeConferida, destinacao, clienteId, itemContaId } = validado;
+
+          // A. Atualiza quantidade_recebida no ItemCompraMarca
+          const itemAtualizado = await tx.itemCompraMarca.update({
+            where: { id: itemCompra.id },
+            data: {
+              quantidade_recebida: itemCompra.quantidade_recebida + quantidadeConferida
+            }
+          });
+          itensAtualizados.push(itemAtualizado);
+
+          // B. Obter ou Criar EstoqueItem (Invariante AD-3: Presentes = Reservados + ProntaEntrega)
+          let estoque = await tx.estoqueItem.findUnique({
+            where: {
+              operacao_id_produto_id: {
+                operacao_id: session.operacaoId,
+                produto_id: itemCompra.produto_id
+              }
+            }
+          });
+
+          if (!estoque) {
+            estoque = await tx.estoqueItem.create({
+              data: {
+                id: gerarUuidV7(),
+                operacao_id: session.operacaoId,
+                produto_id: itemCompra.produto_id,
+                presentes: 0,
+                reservados: 0,
+                pronta_entrega: 0
+              }
+            });
+          }
+
+          const presentesAnterior = estoque.presentes;
+          const reservadosAnterior = estoque.reservados;
+          const prontaEntregaAnterior = estoque.pronta_entrega;
+
+          // Entrada física de frascos na mesa/estante: presentes sempre soma a quantidade conferida
+          const presentesPosterior = presentesAnterior + quantidadeConferida;
+          let reservadosPosterior = reservadosAnterior;
+          let prontaEntregaPosterior = prontaEntregaAnterior;
+
+          if (destinacao === 'CLIENTE' && clienteId) {
+            // Reserva física nominal para cliente (FR-022, Story 3.2):
+            // O frasco está presente mas reservado para a dona
+            reservadosPosterior = reservadosAnterior + quantidadeConferida;
+
+            // Atualiza status do ItemConta para RESERVADO_PRESENTE
+            if (itemContaId) {
+              await tx.itemConta.update({
+                where: { id: itemContaId },
+                data: { status_entrega: 'RESERVADO_PRESENTE' }
+              });
+            }
+          } else {
+            // Destinação pronta-entrega: frasco disponível livremente para venda
+            prontaEntregaPosterior = prontaEntregaAnterior + quantidadeConferida;
+          }
+
+          // Checagem estrita da invariante física AD-3
+          if (presentesPosterior !== reservadosPosterior + prontaEntregaPosterior) {
+            throw new Error(
+              `Violação de Invariante de Estoque (AD-3): Presentes (${presentesPosterior}) != Reservados (${reservadosPosterior}) + ProntaEntrega (${prontaEntregaPosterior})`
+            );
+          }
+
+          // Atualiza registro no estoque
+          await tx.estoqueItem.update({
+            where: { id: estoque.id },
+            data: {
+              presentes: presentesPosterior,
+              reservados: reservadosPosterior,
+              pronta_entrega: prontaEntregaPosterior
+            }
+          });
+
+          // Registra movimentação de estoque
+          const mov = await tx.movimentacaoEstoque.create({
+            data: {
+              id: gerarUuidV7(),
+              operacao_id: session.operacaoId,
+              produto_id: itemCompra.produto_id,
+              estoque_item_id: estoque.id,
+              tipo: 'ENTRADA_COMPRA_MARCA',
+              quantidade: quantidadeConferida,
+              presentes_anterior: presentesAnterior,
+              presentes_posterior: presentesPosterior,
+              reservados_anterior: reservadosAnterior,
+              reservados_posterior: reservadosPosterior,
+              pronta_entrega_anterior: prontaEntregaAnterior,
+              pronta_entrega_posterior: prontaEntregaPosterior,
+              compra_id: compra.id,
+              operador_id: session.operadorId,
+              operador_nome: session.operadorNome,
+              detalhes: JSON.stringify({
+                produto_nome: itemCompra.produto.nome,
+                destinacao,
+                cliente_id: clienteId,
+                compra_id: compra.id
+              })
+            }
+          });
+          movimentacoesRegistradas.push(mov);
+        }
+
+        // C. Atualiza status geral da CompraMarca
+        const itensTotais = await tx.itemCompraMarca.findMany({
+          where: { compra_id: compra.id }
+        });
+        const todosRecebidos = itensTotais.every(
+          (it: any) => (it.quantidade_recebida + (it.quantidade_cancelada_falta || 0)) >= it.quantidade
+        );
+        const novoStatusCompra = todosRecebidos ? 'CONFERIDA' : 'CONFERENCIA_EM_ANDAMENTO';
+
+        const compraAtualizada = await tx.compraMarca.update({
+          where: { id: compra.id },
+          data: { status: novoStatusCompra }
+        });
+
+        // D. Registro de Auditoria nominal (NFR-003, AD-1)
+        await tx.registroAuditoria.create({
+          data: {
+            id: gerarUuidV7(),
+            operacao_id: session.operacaoId,
+            operador_id: session.operadorId,
+            operador_nome: session.operadorNome,
+            acao: 'CONFERIR_COMPRA_MARCA',
+            detalhes: JSON.stringify({
+              compra_id: compra.id,
+              marca_id: compra.marca_id,
+              marca_nome: compra.marca.nome,
+              novo_status: novoStatusCompra,
+              total_itens_conferidos: itensValidados.reduce((acc, i) => acc + i.quantidadeConferida, 0),
+              idempotency_key: chaveNormalizada
+            })
+          }
+        });
+
+        // E. Resposta a ser retornada e cacheada
+        const respostaPayload = {
+          compra_id: compraAtualizada.id,
+          status_compra: compraAtualizada.status,
+          total_itens_conferidos_neste_lote: itensValidados.reduce(
+            (acc, i) => acc + i.quantidadeConferida,
+            0
+          ),
+          conferencia_concluida: todosRecebidos,
+          itens_conferidos: itensValidados.map((v) => ({
+            item_compra_id: v.itemCompra.id,
+            produto_id: v.itemCompra.produto_id,
+            produto_nome: v.itemCompra.produto.nome,
+            quantidade_conferida: v.quantidadeConferida,
+            destinacao: v.destinacao,
+            cliente_id: v.clienteId
+          }))
+        };
+
+        // F. Salvar Registro de Idempotência (AD-7)
+        await tx.registroIdempotencia.create({
+          data: {
+            id: gerarUuidV7(),
+            operacao_id: session.operacaoId,
+            chave: chaveNormalizada,
+            recurso: 'CONFERENCIA_COMPRA',
+            status_code: 200,
+            resposta_json: JSON.stringify(respostaPayload)
+          }
+        });
+
+        return respostaPayload;
+      });
+
+      return reply.status(200).send(resultadoConferencia);
+    }
+  );
+
+  // POST /api/compras-marca/:id/falta-fabrica - Tratamento de falta definitiva da fábrica com ajuste contábil (FR-024, Refinamento Elicitação, AD-5, AD-7)
+  fastify.post<{
+    Params: { id: string };
+    Body: {
+      idempotency_key?: string;
+      item_compra_id: string;
+      quantidade_em_falta: number;
+      motivo?: string;
+    };
+  }>(
+    '/api/compras-marca/:id/falta-fabrica',
+    { preHandler: fastify.requireSession },
+    async (request, reply) => {
+      const { id } = request.params;
+      const session = request.session!;
+
+      // 1. Idempotência (AD-7)
+      const idempotencyKey =
+        request.body?.idempotency_key ||
+        (request.headers['idempotency-key'] as string) ||
+        (request.headers['x-idempotency-key'] as string);
+
+      if (!idempotencyKey || typeof idempotencyKey !== 'string' || idempotencyKey.trim().length === 0) {
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(
+            400,
+            'IDEMPOTENCY_KEY_OBRIGATORIA',
+            'Chave de Idempotência Obrigatória',
+            'O registro de falta da fábrica exige o envio de uma chave de idempotência válida (AD-7).'
+          )
+        );
+      }
+
+      const chaveNormalizada = idempotencyKey.trim();
+
+      // 2. Consulta de Idempotência prévia
+      const registroExistente = await request.tenantPrisma.registroIdempotencia.findFirst({
+        where: { chave: chaveNormalizada }
+      });
+
+      if (registroExistente) {
+        return reply
+          .status(registroExistente.status_code)
+          .type('application/json')
+          .send(JSON.parse(registroExistente.resposta_json));
+      }
+
+      // 3. Validação da Compra e Item
+      const compra = await request.tenantPrisma.compraMarca.findUnique({
+        where: { id: id.trim() },
+        include: {
+          marca: true,
+          itens: {
+            include: {
+              produto: true,
+              cliente: true
+            }
+          }
+        }
+      });
+
+      if (!compra) {
+        return reply.status(404).type('application/problem+json').send(
+          createProblemDetails(
+            404,
+            'COMPRA_NAO_ENCONTRADA',
+            'Compra Não Encontrada',
+            'A compra informada não foi localizada nesta operação.'
+          )
+        );
+      }
+
+      if (compra.status === 'CANCELADA') {
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(
+            400,
+            'COMPRA_CANCELADA',
+            'Compra Cancelada',
+            'Não é possível registrar falta para compra cancelada.'
+          )
+        );
+      }
+
+      const { item_compra_id, quantidade_em_falta, motivo } = request.body || {};
+
+      if (!item_compra_id || typeof item_compra_id !== 'string') {
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(
+            400,
+            'ITEM_OBRIGATORIO',
+            'Item da Compra Obrigatório',
+            'Informe o item_compra_id afetado pela falta de fábrica.'
+          )
+        );
+      }
+
+      const itemCompra = compra.itens.find((it) => it.id === item_compra_id.trim());
+      if (!itemCompra) {
+        return reply.status(404).type('application/problem+json').send(
+          createProblemDetails(
+            404,
+            'ITEM_NAO_ENCONTRADO',
+            'Item Não Encontrado na Compra',
+            'O item informado não pertence a este registro de compra.'
+          )
+        );
+      }
+
+      if (!Number.isInteger(quantidade_em_falta) || quantidade_em_falta <= 0) {
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(
+            400,
+            'QUANTIDADE_INVALIDA',
+            'Quantidade Inválida',
+            'A quantidade em falta deve ser um número inteiro maior que zero.'
+          )
+        );
+      }
+
+      const faltaAtual = itemCompra.quantidade_cancelada_falta || 0;
+      const pendenteReal = itemCompra.quantidade - itemCompra.quantidade_recebida - faltaAtual;
+
+      if (quantidade_em_falta > pendenteReal) {
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(
+            400,
+            'FALTA_EXCEDE_PENDENCIA',
+            'Quantidade de Falta Excede Pendência',
+            `Não é possível cancelar ${quantidade_em_falta} un em falta para "${itemCompra.produto.nome}". O saldo pendente é de apenas ${pendenteReal} un.`
+          )
+        );
+      }
+
+      // 4. Transação Atômica: cancelamento de saldo, sem baixa de estoque (AD-3), ajuste de conta de cliente e emissão de obrigação contábil (AD-5, FR-024)
+      const resultadoFalta = await (fastify.prisma as any).$transaction(async (tx: any) => {
+        // A. Atualiza ItemCompraMarca
+        await tx.itemCompraMarca.update({
+          where: { id: itemCompra.id },
+          data: {
+            quantidade_cancelada_falta: faltaAtual + quantidade_em_falta
+          }
+        });
+
+        let ajusteContaCliente: any = null;
+        let obrigacaoContabil: any = null;
+
+        // B. Se for encomenda de cliente, ajustar ItemConta e Conta
+        if (itemCompra.item_conta_id) {
+          const itemConta = await tx.itemConta.findUnique({
+            where: { id: itemCompra.item_conta_id },
+            include: { conta: true }
+          });
+
+          if (itemConta) {
+            // Atualiza status do ItemConta para CANCELADO_FALTA_FABRICA
+            await tx.itemConta.update({
+              where: { id: itemConta.id },
+              data: {
+                status_entrega: 'CANCELADO_FALTA_FABRICA'
+              }
+            });
+
+            // Valor do item cancelado a abater da conta
+            const valorAbatimentoCentavos = itemConta.preco_unitario_centavos * quantidade_em_falta;
+            const contaAtual = itemConta.conta;
+            const novoValorTotalConta = Math.max(0, contaAtual.valor_total - valorAbatimentoCentavos);
+
+            // Verifica se a conta já tinha pagamentos registrados que agora superam o novo valor total (AD-5, FR-024)
+            let excedenteCentavos = 0;
+            if (contaAtual.total_pago > novoValorTotalConta) {
+              excedenteCentavos = contaAtual.total_pago - novoValorTotalConta;
+              obrigacaoContabil = {
+                tipo: 'ESTORNO_OU_CREDITO_PENDENTE',
+                cliente_id: contaAtual.cliente_id,
+                conta_id: contaAtual.id,
+                excedente_centavos: excedenteCentavos,
+                excedente_formatado: `R$ ${(excedenteCentavos / 100).toFixed(2).replace('.', ',')}`,
+                motivo: motivo || 'Falta comunicada pela fábrica em produto encomendado e já pago.'
+              };
+
+              // Registrar auditoria de obrigação contábil
+              await tx.registroAuditoria.create({
+                data: {
+                  id: gerarUuidV7(),
+                  operacao_id: session.operacaoId,
+                  operador_id: session.operadorId,
+                  operador_nome: session.operadorNome,
+                  acao: 'OBRIGACAO_CONTABIL_EXCEDENTE_FALTA',
+                  detalhes: JSON.stringify(obrigacaoContabil)
+                }
+              });
+            }
+
+            // Atualiza a Conta
+            const novoStatusConta =
+              novoValorTotalConta === 0
+                ? 'QUITADA'
+                : contaAtual.total_pago >= novoValorTotalConta
+                ? 'QUITADA'
+                : contaAtual.total_pago > 0
+                ? 'PAGA_PARCIAL'
+                : 'ABERTA';
+
+            await tx.conta.update({
+              where: { id: contaAtual.id },
+              data: {
+                valor_total: novoValorTotalConta,
+                status: novoStatusConta
+              }
+            });
+
+            ajusteContaCliente = {
+              conta_id: contaAtual.id,
+              cliente_id: contaAtual.cliente_id,
+              valor_anterior_centavos: contaAtual.valor_total,
+              valor_novo_centavos: novoValorTotalConta,
+              abatimento_centavos: valorAbatimentoCentavos,
+              excedente_centavos: excedenteCentavos
+            };
+          }
+        }
+
+        // C. Checar se a compra está totalmente concluída (todos os itens recebidos ou cancelados)
+        const itensTotais = await tx.itemCompraMarca.findMany({
+          where: { compra_id: compra.id }
+        });
+        const todosResolvidos = itensTotais.every(
+          (it: any) => (it.quantidade_recebida + (it.quantidade_cancelada_falta || 0)) >= it.quantidade
+        );
+        const novoStatusCompra = todosResolvidos ? 'CONFERIDA' : 'CONFERENCIA_EM_ANDAMENTO';
+
+        await tx.compraMarca.update({
+          where: { id: compra.id },
+          data: { status: novoStatusCompra }
+        });
+
+        // D. Auditoria nominal
+        await tx.registroAuditoria.create({
+          data: {
+            id: gerarUuidV7(),
+            operacao_id: session.operacaoId,
+            operador_id: session.operadorId,
+            operador_nome: session.operadorNome,
+            acao: 'REGISTRAR_FALTA_FABRICA',
+            detalhes: JSON.stringify({
+              compra_id: compra.id,
+              item_compra_id: itemCompra.id,
+              produto_nome: itemCompra.produto.nome,
+              quantidade_cancelada_falta: quantidade_em_falta,
+              motivo: motivo || 'Falta comunicada pela fábrica',
+              novo_status_compra: novoStatusCompra,
+              ajuste_conta_cliente: ajusteContaCliente,
+              obrigacao_contabil: obrigacaoContabil
+            })
+          }
+        });
+
+        // E. Resposta a persistir no registro de idempotência
+        const respostaPayload = {
+          compra_id: compra.id,
+          status_compra: novoStatusCompra,
+          item_compra_id: itemCompra.id,
+          produto_nome: itemCompra.produto.nome,
+          quantidade_cancelada_falta: quantidade_em_falta,
+          quantidade_total_falta_item: faltaAtual + quantidade_em_falta,
+          conferencia_concluida: todosResolvidos,
+          ajuste_conta_cliente: ajusteContaCliente,
+          obrigacao_contabil: obrigacaoContabil
+        };
+
+        await tx.registroIdempotencia.create({
+          data: {
+            id: gerarUuidV7(),
+            operacao_id: session.operacaoId,
+            chave: chaveNormalizada,
+            recurso: 'FALTA_FABRICA_COMPRA',
+            status_code: 200,
+            resposta_json: JSON.stringify(respostaPayload)
+          }
+        });
+
+        return respostaPayload;
+      });
+
+      return reply.status(200).send(resultadoFalta);
+    }
+  );
 };
+

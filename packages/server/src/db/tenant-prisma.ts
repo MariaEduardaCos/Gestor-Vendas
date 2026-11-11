@@ -1,5 +1,23 @@
 import { PrismaClient } from '@prisma/client';
 
+function flattenCompoundKeys(where: any): any {
+  if (!where || typeof where !== 'object') return where;
+  let flattened: any = { ...where };
+  for (const key of Object.keys(flattened)) {
+    if (
+      typeof flattened[key] === 'object' &&
+      flattened[key] !== null &&
+      !Array.isArray(flattened[key]) &&
+      !(flattened[key] instanceof Date)
+    ) {
+      const nested = flattened[key];
+      delete flattened[key];
+      flattened = { ...flattened, ...nested };
+    }
+  }
+  return flattened;
+}
+
 /**
  * Cria uma instância do Prisma Client com extensão mandatória para isolamento multi-inquilino.
  * Todas as leituras (findMany, findFirst, findUnique, findFirstOrThrow, findUniqueOrThrow, count)
@@ -47,9 +65,10 @@ export function createTenantPrisma(basePrisma: PrismaClient, operacaoId: string)
             // Em SQLite/Prisma, findUnique requer campo @unique.
             // Para garantir isolamento de inquilino mesmo conhecendo o ID,
             // redirecionamos para findFirst com cláusula obrigatória operacao_id.
+            const whereClause = flattenCompoundKeys(args.where);
             return (basePrisma as any)[model].findFirst({
               where: {
-                ...args.where,
+                ...whereClause,
                 operacao_id: normalizedOperacaoId
               },
               include: (args as any).include,
@@ -65,9 +84,10 @@ export function createTenantPrisma(basePrisma: PrismaClient, operacaoId: string)
         },
         async findUniqueOrThrow({ model, args, query }) {
           if (model !== 'Operacao') {
+            const whereClause = flattenCompoundKeys(args.where);
             return (basePrisma as any)[model].findFirstOrThrow({
               where: {
-                ...args.where,
+                ...whereClause,
                 operacao_id: normalizedOperacaoId
               },
               include: (args as any).include,
