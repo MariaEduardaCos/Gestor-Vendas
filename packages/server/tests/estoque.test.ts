@@ -22,6 +22,9 @@ describe('Story 1.4: Lançamento de Estoque Inicial por Produto', () => {
     await prisma.$connect();
 
     // Limpeza de tabelas na ordem de dependência
+    await prisma.itemConta.deleteMany();
+    await prisma.encomenda.deleteMany();
+    await prisma.conta.deleteMany();
     await prisma.movimentacaoEstoque.deleteMany();
     await prisma.estoqueItem.deleteMany();
     await prisma.produto.deleteMany();
@@ -87,6 +90,9 @@ describe('Story 1.4: Lançamento de Estoque Inicial por Produto', () => {
   });
 
   afterAll(async () => {
+    await prisma.itemConta.deleteMany();
+    await prisma.encomenda.deleteMany();
+    await prisma.conta.deleteMany();
     await prisma.movimentacaoEstoque.deleteMany();
     await prisma.estoqueItem.deleteMany();
     await prisma.produto.deleteMany();

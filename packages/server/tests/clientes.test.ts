@@ -19,6 +19,7 @@ describe('Story 1.2: Clientes API - Cadastro, Edição, Busca e Ficha', () => {
     await prisma.$connect();
 
     // Limpeza de tabelas
+    await prisma.itemConta.deleteMany();
     await prisma.encomenda.deleteMany();
     await prisma.conta.deleteMany();
     await prisma.cliente.deleteMany();

@@ -150,8 +150,20 @@ export const clientesRoutes: FastifyPluginAsync = async (fastify) => {
       const cliente = await request.tenantPrisma.cliente.findUnique({
         where: { id },
         include: {
-          contas: true,
-          encomendas: true
+          contas: {
+            include: {
+              itens: {
+                include: { produto: true }
+              }
+            }
+          },
+          encomendas: {
+            include: {
+              itens: {
+                include: { produto: true }
+              }
+            }
+          }
         }
       });
 
@@ -174,18 +186,51 @@ export const clientesRoutes: FastifyPluginAsync = async (fastify) => {
         telefone_formatado: formatarTelefone(cliente.telefone),
         endereco: cliente.endereco,
         saldo_credito_centavos: cliente.saldo_credito_centavos,
-        contas: cliente.contas.map((c) => ({
-          id: c.id,
-          valor_total: c.valor_total,
-          total_pago: c.total_pago,
-          status: c.status,
-          criado_em: c.criado_em.toISOString()
-        })),
-        encomendas: cliente.encomendas.map((e) => ({
+        contas: cliente.contas.map((c: any) => {
+          const itensValidos = (c.itens || []).filter((i: any) => i.status_entrega !== 'CANCELADO');
+          const totalSemAguardados =
+            c.itens && c.itens.length > 0
+              ? itensValidos
+                  .filter((i: any) => i.status_entrega !== 'AGUARDANDO_FABRICA')
+                  .reduce((acc: number, cur: any) => acc + cur.quantidade * cur.preco_unitario_centavos, 0)
+              : c.valor_total;
+          const saldoCobravelHoje = Math.max(0, totalSemAguardados - c.total_pago);
+
+          return {
+            id: c.id,
+            encomenda_id: c.encomenda_id,
+            valor_total: c.valor_total,
+            total_pago: c.total_pago,
+            total_sem_aguardados: totalSemAguardados,
+            saldo_cobravel_hoje: saldoCobravelHoje,
+            status: c.status,
+            criado_em: c.criado_em.toISOString(),
+            itens: (c.itens || []).map((i: any) => ({
+              id: i.id,
+              produto_id: i.produto_id,
+              produto_nome: i.produto?.nome,
+              quantidade: i.quantidade,
+              preco_unitario_centavos: i.preco_unitario_centavos,
+              custo_unitario_centavos: i.custo_unitario_centavos,
+              origem_custo: i.origem_custo,
+              status_entrega: i.status_entrega
+            }))
+          };
+        }),
+        encomendas: cliente.encomendas.map((e: any) => ({
           id: e.id,
           descricao: e.descricao,
           status: e.status,
-          criado_em: e.criado_em.toISOString()
+          criado_em: e.criado_em.toISOString(),
+          itens: (e.itens || []).map((i: any) => ({
+            id: i.id,
+            produto_id: i.produto_id,
+            produto_nome: i.produto?.nome,
+            variante: i.produto?.variante,
+            quantidade: i.quantidade,
+            preco_unitario_centavos: i.preco_unitario_centavos,
+            status_entrega: i.status_entrega
+          }))
         })),
         criado_em: cliente.criado_em.toISOString(),
         atualizado_em: cliente.atualizado_em.toISOString()

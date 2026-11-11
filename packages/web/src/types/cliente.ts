@@ -1,9 +1,24 @@
+export interface ItemContaDTO {
+  id: string;
+  produto_id: string;
+  produto_nome?: string;
+  quantidade: number;
+  preco_unitario_centavos: number;
+  custo_unitario_centavos?: number | null;
+  origem_custo?: string;
+  status_entrega: string;
+}
+
 export interface ContaDTO {
   id: string;
+  encomenda_id?: string | null;
   valor_total: number;
   total_pago: number;
+  total_sem_aguardados?: number;
+  saldo_cobravel_hoje?: number;
   status: string;
   criado_em: string;
+  itens?: ItemContaDTO[];
 }
 
 export interface EncomendaDTO {
@@ -11,6 +26,15 @@ export interface EncomendaDTO {
   descricao?: string | null;
   status: string;
   criado_em: string;
+  itens?: Array<{
+    id: string;
+    produto_id: string;
+    produto_nome?: string;
+    variante?: string | null;
+    quantidade: number;
+    preco_unitario_centavos: number;
+    status_entrega: string;
+  }>;
 }
 
 export interface ClienteDTO {

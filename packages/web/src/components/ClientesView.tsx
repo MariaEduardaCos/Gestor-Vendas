@@ -8,6 +8,7 @@ interface ClientesViewProps {
   apiBaseUrl?: string;
   sessionToken?: string;
   onVerFicha: (clienteId: string) => void;
+  onAnotarEncomenda?: (cliente: ClienteDTO) => void;
   refreshTrigger?: number;
 }
 
@@ -18,6 +19,7 @@ export function ClientesView({
   apiBaseUrl = '/api',
   sessionToken,
   onVerFicha,
+  onAnotarEncomenda,
   refreshTrigger
 }: ClientesViewProps) {
   const [clientes, setClientes] = useState<ClienteDTO[]>([]);
@@ -211,12 +213,21 @@ export function ClientesView({
               </div>
 
               <div className="flex items-center gap-2 self-end sm:self-center">
+                {onAnotarEncomenda && (
+                  <button
+                    type="button"
+                    onClick={() => onAnotarEncomenda(cliente)}
+                    className="min-h-touch-target px-3.5 py-2 bg-brand-primary hover:bg-brand-hover text-ink-inverse font-bold text-label-strong rounded-md transition-colors flex items-center gap-1 shadow-xs"
+                  >
+                    <span>+</span> Encomenda
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => onVerFicha(cliente.id)}
-                  className="min-h-touch-target px-4 py-2 text-brand-primary hover:bg-brand-subtle font-bold text-label-strong rounded-md transition-colors flex items-center gap-1"
+                  className="min-h-touch-target px-3.5 py-2 text-brand-primary hover:bg-brand-subtle font-bold text-label-strong rounded-md transition-colors flex items-center gap-1"
                 >
-                  Ver Ficha →
+                  Ficha →
                 </button>
               </div>
             </div>

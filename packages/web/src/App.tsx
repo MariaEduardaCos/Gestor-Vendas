@@ -5,6 +5,7 @@ import { ClienteFichaModal } from './components/ClienteFichaModal';
 import { ProdutosView } from './components/ProdutosView';
 import { VisorView } from './components/VisorView';
 import { LeitorRemotoMobileView } from './components/LeitorRemotoMobileView';
+import { EncomendaModal } from './components/EncomendaModal';
 import type { ClienteDTO } from './types/cliente';
 
 export function App() {
@@ -26,10 +27,12 @@ export function App() {
 
   // Gatilho para atualizar a ClientesView quando a ficha editar/excluir cliente
   const [refreshClientesKey, setRefreshClientesKey] = useState(0);
+  const [refreshFichaKey, setRefreshFichaKey] = useState(0);
 
-  // Estados da Gaveta Rápida (S3) e Ficha da Cliente (S2)
+  // Estados da Gaveta Rápida (S3), Ficha da Cliente (S2) e Encomenda Modal (S7)
   const [drawerAberto, setDrawerAberto] = useState(false);
   const [fichaClienteId, setFichaClienteId] = useState<string | null>(null);
+  const [encomendaCliente, setEncomendaCliente] = useState<{ id: string; nome: string } | null>(null);
   const [clienteRecemCriado, setClienteRecemCriado] = useState<ClienteDTO | null>(null);
   const [clienteSelecionadoFluxo, setClienteSelecionadoFluxo] = useState<ClienteDTO | null>(null);
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null);
@@ -163,6 +166,34 @@ export function App() {
               </button>
             </div>
 
+            {/* Acesso Rápido a Encomendas (S7, Story 2.1) */}
+            <div className="bg-surface-raised border border-border-hairline rounded-lg p-5 shadow-sm flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-title-md font-bold text-ink-primary">
+                  Encomendas de Clientes (S7)
+                </h3>
+                <span className="text-meta font-semibold text-brand-primary">Story 2.1</span>
+              </div>
+              <p className="text-body-md text-ink-secondary">
+                Anote pedidos de clientes antes de fechar a compra na revista. Cria a conta da cliente sem alterar o estoque da sua estante.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (clienteSelecionadoFluxo) {
+                    setEncomendaCliente({ id: clienteSelecionadoFluxo.id, nome: clienteSelecionadoFluxo.nome });
+                  } else {
+                    setAbaAtiva('clientes');
+                    setMensagemSucesso('Selecione ou clique em "+ Encomenda" na cliente desejada.');
+                  }
+                }}
+                className="min-h-touch-target bg-brand-primary hover:bg-brand-hover text-ink-inverse font-bold text-label-strong rounded-md flex items-center justify-center gap-2 shadow-sm transition-colors"
+              >
+                <span>📝</span> Anotar Nova Encomenda (S7)
+              </button>
+            </div>
+
             {/* Acesso Rápido ao Catálogo de Produtos e Marcas (S4) */}
             <div className="bg-surface-raised border border-border-hairline rounded-lg p-5 shadow-sm flex flex-col gap-3">
               <div className="flex items-center justify-between">
@@ -254,6 +285,9 @@ export function App() {
             sessionToken={sessionToken || undefined}
             refreshTrigger={refreshClientesKey}
             onVerFicha={(id) => setFichaClienteId(id)}
+            onAnotarEncomenda={(c) => {
+              setEncomendaCliente({ id: c.id, nome: c.nome });
+            }}
             onSelecionarCliente={(c) => {
               setClienteSelecionadoFluxo(c);
               setMensagemSucesso(`Cliente "${c.nome}" selecionada para o fluxo!`);
@@ -332,7 +366,11 @@ export function App() {
         clienteId={fichaClienteId}
         isOpen={!!fichaClienteId}
         sessionToken={sessionToken || undefined}
+        refreshKey={refreshFichaKey}
         onClose={() => setFichaClienteId(null)}
+        onAbrirEncomenda={(cli) => {
+          setEncomendaCliente(cli);
+        }}
         onClienteAtualizado={() => {
           setRefreshClientesKey((k) => k + 1);
         }}
@@ -342,6 +380,20 @@ export function App() {
             setClienteSelecionadoFluxo(null);
           }
           setFichaClienteId(null);
+        }}
+      />
+
+      {/* Modal de Anotação de Encomenda Individual (S7) */}
+      <EncomendaModal
+        isOpen={!!encomendaCliente}
+        cliente={encomendaCliente}
+        sessionToken={sessionToken || undefined}
+        onClose={() => setEncomendaCliente(null)}
+        onEncomendaCriada={(novaEnc) => {
+          setRefreshClientesKey((k) => k + 1);
+          setRefreshFichaKey((k) => k + 1);
+          setMensagemSucesso(`Encomenda anotada com sucesso para ${novaEnc.cliente_nome}! Total: ${novaEnc.valor_total_formatado}`);
+          setTimeout(() => setMensagemSucesso(null), 6000);
         }}
       />
     </div>

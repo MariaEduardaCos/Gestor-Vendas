@@ -11,6 +11,7 @@ import { marcasRoutes } from './routes/marcas.js';
 import { produtosRoutes } from './routes/produtos.js';
 import { estoqueRoutes } from './routes/estoque.js';
 import { pareamentoRoutes } from './routes/pareamento.js';
+import { encomendasRoutes } from './routes/encomendas.js';
 
 export interface BuildAppOptions {
   prisma?: PrismaClient;
@@ -44,6 +45,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(produtosRoutes);
   app.register(estoqueRoutes);
   app.register(pareamentoRoutes);
+  app.register(encomendasRoutes);
 
   // Global Error Handler conforme RFC 7807
   app.setErrorHandler((error: FastifyError | Error, request, reply) => {

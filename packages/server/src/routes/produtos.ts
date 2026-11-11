@@ -561,6 +561,21 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
+      const itensVinculados = await request.tenantPrisma.itemConta.count({
+        where: { produto_id: id }
+      });
+
+      if (itensVinculados > 0) {
+        return reply.status(409).type('application/problem+json').send(
+          createProblemDetails(
+            409,
+            'CONFLICT',
+            'Produto em Uso',
+            'Este produto possui contas ou encomendas vinculadas e não pode ser excluído.'
+          )
+        );
+      }
+
       await request.tenantPrisma.produto.delete({
         where: { id }
       });

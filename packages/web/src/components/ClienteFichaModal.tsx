@@ -7,8 +7,10 @@ interface ClienteFichaModalProps {
   onClose: () => void;
   onClienteAtualizado?: () => void;
   onClienteExcluido?: (id: string) => void;
+  onAbrirEncomenda?: (cliente: { id: string; nome: string }) => void;
   apiBaseUrl?: string;
   sessionToken?: string;
+  refreshKey?: number;
 }
 
 export function ClienteFichaModal({
@@ -17,8 +19,10 @@ export function ClienteFichaModal({
   onClose,
   onClienteAtualizado,
   onClienteExcluido,
+  onAbrirEncomenda,
   apiBaseUrl = '/api',
-  sessionToken
+  sessionToken,
+  refreshKey
 }: ClienteFichaModalProps) {
   const [ficha, setFicha] = useState<ClienteFichaDTO | null>(null);
   const [carregando, setCarregando] = useState(false);
@@ -44,7 +48,7 @@ export function ClienteFichaModal({
     } else {
       setFicha(null);
     }
-  }, [isOpen, clienteId]);
+  }, [isOpen, clienteId, refreshKey]);
 
   const carregarFicha = async () => {
     if (!clienteId) return;
@@ -300,8 +304,19 @@ export function ClienteFichaModal({
                 <div className="flex justify-end gap-2">
                   <button
                     type="button"
+                    onClick={() => {
+                      if (ficha) {
+                        onAbrirEncomenda?.({ id: ficha.id, nome: ficha.nome });
+                      }
+                    }}
+                    className="min-h-touch-target px-4 py-2 bg-brand-primary hover:bg-brand-hover text-ink-inverse rounded-md text-label-strong font-bold flex items-center gap-1.5 shadow-sm transition-colors"
+                  >
+                    <span>+</span> Anotar Encomenda
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setModoEdicao(true)}
-                    className="min-h-[40px] px-3.5 py-1.5 border border-border-strong hover:bg-surface-sunken text-ink-primary rounded-md text-label-strong font-medium transition-colors"
+                    className="min-h-touch-target px-3.5 py-1.5 border border-border-strong hover:bg-surface-sunken text-ink-primary rounded-md text-label-strong font-medium transition-colors"
                   >
                     ✏️ Editar Dados
                   </button>
@@ -327,15 +342,19 @@ export function ClienteFichaModal({
                   <div className="flex flex-col gap-2">
                     {ficha.contas.map((conta) => {
                       const pendente = conta.valor_total - conta.total_pago;
+                      const cobravelHoje = conta.saldo_cobravel_hoje ?? 0;
+                      const temItensAguardando = conta.itens && conta.itens.some((it: any) => it.status_entrega === 'AGUARDANDO_FABRICA');
+                      const aguardandoFabrica = temItensAguardando || (Boolean(conta.encomenda_id) && cobravelHoje === 0 && conta.valor_total > 0 && conta.status !== 'QUITADA');
+
                       return (
                         <div
                           key={conta.id}
-                          className="bg-surface-sunken border border-border-hairline p-3.5 rounded-lg flex items-center justify-between"
+                          className="bg-surface-sunken border border-border-hairline p-3.5 rounded-lg flex flex-col gap-1.5"
                         >
-                          <div>
+                          <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <span className="text-body-md font-bold text-ink-primary">
-                                {formatarMoeda(conta.valor_total)}
+                                Total: {formatarMoeda(conta.valor_total)}
                               </span>
                               <span
                                 className={`text-meta px-2 py-0.5 rounded-full font-semibold ${
@@ -347,14 +366,26 @@ export function ClienteFichaModal({
                                 {conta.status === 'QUITADA' ? 'Quitada' : 'Em Aberto'}
                               </span>
                             </div>
-                            <p className="text-meta text-ink-secondary mt-0.5">
-                              Pago: {formatarMoeda(conta.total_pago)}
-                              {pendente > 0 && ` • Falta: ${formatarMoeda(pendente)}`}
-                            </p>
+                            <span className="text-meta text-ink-muted">
+                              {new Date(conta.criado_em).toLocaleDateString('pt-BR')}
+                            </span>
                           </div>
-                          <span className="text-meta text-ink-muted">
-                            {new Date(conta.criado_em).toLocaleDateString('pt-BR')}
-                          </span>
+
+                          <div className="flex items-center justify-between text-meta">
+                            <span className="text-ink-secondary">
+                              Pago: {formatarMoeda(conta.total_pago)}
+                              {pendente > 0 && ` • Falta Total: ${formatarMoeda(pendente)}`}
+                            </span>
+                            <span className={`font-semibold ${aguardandoFabrica ? 'text-status-waiting' : 'text-ink-primary'}`}>
+                              Cobrável Hoje: {formatarMoeda(cobravelHoje)}
+                            </span>
+                          </div>
+
+                          {aguardandoFabrica && (
+                            <div className="mt-1 px-2.5 py-1 bg-status-waiting-bg rounded text-meta text-status-waiting font-medium">
+                              ⏳ Itens aguardando fábrica: R$ 0,00 cobrável hoje (AD-4)
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -368,9 +399,22 @@ export function ClienteFichaModal({
                   <h3 className="text-title-md font-bold text-ink-primary">
                     Encomendas
                   </h3>
-                  <span className="text-meta text-ink-secondary">
-                    {ficha.encomendas.length} {ficha.encomendas.length === 1 ? 'item' : 'itens'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-meta text-ink-secondary">
+                      {ficha.encomendas.length} {ficha.encomendas.length === 1 ? 'registro' : 'registros'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (ficha) {
+                          onAbrirEncomenda?.({ id: ficha.id, nome: ficha.nome });
+                        }
+                      }}
+                      className="text-meta text-brand-primary font-bold hover:underline"
+                    >
+                      + Anotar
+                    </button>
+                  </div>
                 </div>
 
                 {ficha.encomendas.length === 0 ? (
@@ -382,31 +426,53 @@ export function ClienteFichaModal({
                     {ficha.encomendas.map((enc) => (
                       <div
                         key={enc.id}
-                        className="bg-surface-sunken border border-border-hairline p-3.5 rounded-lg flex items-center justify-between"
+                        className="bg-surface-sunken border border-border-hairline p-3.5 rounded-lg flex flex-col gap-2"
                       >
-                        <div>
-                          <p className="text-body-md font-semibold text-ink-primary">
-                            {enc.descricao || 'Produto encomendado'}
-                          </p>
-                          <span className="text-meta text-ink-muted">
-                            Pedida em {new Date(enc.criado_em).toLocaleDateString('pt-BR')}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-body-md font-semibold text-ink-primary">
+                              {enc.descricao || 'Encomenda'}
+                            </p>
+                            <span className="text-meta text-ink-muted">
+                              Pedida em {new Date(enc.criado_em).toLocaleDateString('pt-BR')}
+                            </span>
+                          </div>
+                          <span
+                            className={`text-meta px-2.5 py-1 rounded-full font-semibold ${
+                              enc.status === 'RECEBIDO'
+                                ? 'bg-status-available-bg text-status-available'
+                                : enc.status === 'PARCIALMENTE_RECEBIDO'
+                                ? 'bg-status-reserved-bg text-status-reserved'
+                                : enc.status === 'CANCELADO'
+                                ? 'bg-status-alert-bg text-status-alert'
+                                : 'bg-status-waiting-bg text-status-waiting'
+                            }`}
+                          >
+                            {enc.status === 'RECEBIDO'
+                              ? 'Recebido da Fábrica'
+                              : enc.status === 'PARCIALMENTE_RECEBIDO'
+                              ? 'Parcialmente Recebido'
+                              : enc.status === 'CANCELADO'
+                              ? 'Cancelado'
+                              : 'Aguardando Fábrica'}
                           </span>
                         </div>
-                        <span
-                          className={`text-meta px-2.5 py-1 rounded-full font-semibold ${
-                            enc.status === 'RESERVADO'
-                              ? 'bg-status-reserved-bg text-status-reserved'
-                              : enc.status === 'ENTREGUE'
-                              ? 'bg-status-available-bg text-status-available'
-                              : 'bg-status-waiting-bg text-status-waiting'
-                          }`}
-                        >
-                          {enc.status === 'RESERVADO'
-                            ? 'Separado / Reservado'
-                            : enc.status === 'ENTREGUE'
-                            ? 'Entregue'
-                            : 'Aguardando Fábrica'}
-                        </span>
+
+                        {enc.itens && enc.itens.length > 0 && (
+                          <div className="pt-2 border-t border-border-hairline flex flex-col gap-1">
+                            {enc.itens.map((it) => (
+                              <div key={it.id} className="flex items-center justify-between text-meta">
+                                <span className="text-ink-primary font-medium">
+                                  {it.quantidade}x {it.produto_nome || 'Produto'}
+                                  {it.variante ? ` (${it.variante})` : ''}
+                                </span>
+                                <span className="text-ink-secondary">
+                                  {formatarMoeda(it.preco_unitario_centavos * it.quantidade)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

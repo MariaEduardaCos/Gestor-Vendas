@@ -19,6 +19,9 @@ describe('Story 1.3: Produtos, Variantes, Preço de Venda e Custo por Marca', ()
     await prisma.$connect();
 
     // Limpeza de tabelas
+    await prisma.itemConta.deleteMany();
+    await prisma.encomenda.deleteMany();
+    await prisma.conta.deleteMany();
     await prisma.produto.deleteMany();
     await prisma.marca.deleteMany();
     await prisma.registroAuditoria.deleteMany();
@@ -58,6 +61,9 @@ describe('Story 1.3: Produtos, Variantes, Preço de Venda e Custo por Marca', ()
   });
 
   afterAll(async () => {
+    await prisma.itemConta.deleteMany();
+    await prisma.encomenda.deleteMany();
+    await prisma.conta.deleteMany();
     await prisma.produto.deleteMany();
     await prisma.marca.deleteMany();
     await prisma.registroAuditoria.deleteMany();

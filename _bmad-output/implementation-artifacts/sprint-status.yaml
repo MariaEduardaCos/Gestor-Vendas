@@ -44,9 +44,9 @@ development_status:
   1-6-pareamento-efêmero-celular-computador-com-websocket-e-feedba: done
   epic-1-retrospective: done
 
-  epic-2: backlog
-  2-1-registro-de-encomenda-individual-por-cliente-e-criação-da-co: backlog
-  2-2-consolidação-da-compra-à-marca-e-separação-entre-clientes-e: backlog
+  epic-2: in-progress
+  2-1-registro-de-encomenda-individual-por-cliente-e-criação-da-co: done
+  2-2-consolidação-da-compra-à-marca-e-separação-entre-clientes-e: ready-for-dev
   2-3-imutabilidade-e-congelamento-de-preço-de-venda-e-custo-histó: backlog
   epic-2-retrospective: optional
 
