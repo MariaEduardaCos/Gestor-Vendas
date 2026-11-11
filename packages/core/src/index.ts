@@ -11,4 +11,5 @@ export * from './domain/estoque.js';
 export * from './domain/scanner.js';
 export * from './domain/pareamento.js';
 export * from './domain/encomenda.js';
+export * from './domain/compra-marca.js';
 export * from './errors/problem-details.js';

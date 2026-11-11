@@ -6,6 +6,7 @@ import { ProdutosView } from './components/ProdutosView';
 import { VisorView } from './components/VisorView';
 import { LeitorRemotoMobileView } from './components/LeitorRemotoMobileView';
 import { EncomendaModal } from './components/EncomendaModal';
+import { CompraMarcaModal } from './components/CompraMarcaModal';
 import type { ClienteDTO } from './types/cliente';
 
 export function App() {
@@ -29,10 +30,11 @@ export function App() {
   const [refreshClientesKey, setRefreshClientesKey] = useState(0);
   const [refreshFichaKey, setRefreshFichaKey] = useState(0);
 
-  // Estados da Gaveta Rápida (S3), Ficha da Cliente (S2) e Encomenda Modal (S7)
+  // Estados da Gaveta Rápida (S3), Ficha da Cliente (S2), Encomenda Modal (S7) e Compra Marca Modal (S8)
   const [drawerAberto, setDrawerAberto] = useState(false);
   const [fichaClienteId, setFichaClienteId] = useState<string | null>(null);
   const [encomendaCliente, setEncomendaCliente] = useState<{ id: string; nome: string } | null>(null);
+  const [compraMarcaModalAberta, setCompraMarcaModalAberta] = useState(false);
   const [clienteRecemCriado, setClienteRecemCriado] = useState<ClienteDTO | null>(null);
   const [clienteSelecionadoFluxo, setClienteSelecionadoFluxo] = useState<ClienteDTO | null>(null);
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null);
@@ -191,6 +193,29 @@ export function App() {
                 className="min-h-touch-target bg-brand-primary hover:bg-brand-hover text-ink-inverse font-bold text-label-strong rounded-md flex items-center justify-center gap-2 shadow-sm transition-colors"
               >
                 <span>📝</span> Anotar Nova Encomenda (S7)
+              </button>
+            </div>
+
+            {/* Fechar Pedido à Marca com Espelho Consolidado (S8, Story 2.2) */}
+            <div className="bg-surface-raised border border-brand-primary/30 rounded-lg p-5 shadow-sm flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-title-md font-bold text-ink-primary">
+                  Pedido à Marca (Fábrica)
+                </h3>
+                <span className="text-meta font-bold bg-brand-subtle text-brand-primary px-2.5 py-1 rounded">
+                  Story 2.2
+                </span>
+              </div>
+              <p className="text-body-md text-ink-secondary">
+                Consolide encomendas de clientes por marca, adicione pronta-entrega e veja o espelho com totais por produto para digitar no portal da fábrica.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setCompraMarcaModalAberta(true)}
+                className="min-h-touch-target bg-brand-primary hover:bg-brand-hover text-ink-inverse font-bold text-label-strong rounded-md flex items-center justify-center gap-2 shadow-sm transition-colors"
+              >
+                <span>🛒</span> Fechar Pedido com a Marca (S8)
               </button>
             </div>
 
@@ -393,6 +418,19 @@ export function App() {
           setRefreshClientesKey((k) => k + 1);
           setRefreshFichaKey((k) => k + 1);
           setMensagemSucesso(`Encomenda anotada com sucesso para ${novaEnc.cliente_nome}! Total: ${novaEnc.valor_total_formatado}`);
+          setTimeout(() => setMensagemSucesso(null), 6000);
+        }}
+      />
+
+      {/* Modal de Fechamento de Pedido com a Marca (S8, Story 2.2) */}
+      <CompraMarcaModal
+        isOpen={compraMarcaModalAberta}
+        sessionToken={sessionToken || undefined}
+        onClose={() => setCompraMarcaModalAberta(false)}
+        onCompraRegistrada={(compra) => {
+          setRefreshClientesKey((k) => k + 1);
+          setRefreshFichaKey((k) => k + 1);
+          setMensagemSucesso(`Compra registrada para ${compra.marca_nome}! ${compra.quantidade_total_itens} itens consolidados.`);
           setTimeout(() => setMensagemSucesso(null), 6000);
         }}
       />

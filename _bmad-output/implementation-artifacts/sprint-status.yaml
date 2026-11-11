@@ -46,8 +46,8 @@ development_status:
 
   epic-2: in-progress
   2-1-registro-de-encomenda-individual-por-cliente-e-criação-da-co: done
-  2-2-consolidação-da-compra-à-marca-e-separação-entre-clientes-e: ready-for-dev
-  2-3-imutabilidade-e-congelamento-de-preço-de-venda-e-custo-histó: backlog
+  2-2-consolidação-da-compra-à-marca-e-separação-entre-clientes-e: done
+  2-3-imutabilidade-e-congelamento-de-preço-de-venda-e-custo-histó: in-progress
   epic-2-retrospective: optional
 
   epic-3: backlog

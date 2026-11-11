@@ -25,6 +25,8 @@ describe('Story 2.1: Encomendas API - Registro Individual, Criação de Conta e 
     await prisma.$connect();
 
     // Limpeza de tabelas
+    await prisma.itemCompraMarca.deleteMany();
+    await prisma.compraMarca.deleteMany();
     await prisma.itemConta.deleteMany();
     await prisma.encomenda.deleteMany();
     await prisma.conta.deleteMany();
@@ -144,6 +146,8 @@ describe('Story 2.1: Encomendas API - Registro Individual, Criação de Conta e 
   });
 
   afterAll(async () => {
+    await prisma.itemCompraMarca.deleteMany();
+    await prisma.compraMarca.deleteMany();
     await prisma.itemConta.deleteMany();
     await prisma.encomenda.deleteMany();
     await prisma.conta.deleteMany();

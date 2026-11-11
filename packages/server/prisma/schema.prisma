@@ -23,6 +23,8 @@ model Operacao {
   itens_estoque    EstoqueItem[]
   movimentacoes_estoque MovimentacaoEstoque[]
   itens_conta      ItemConta[]
+  compras_marca    CompraMarca[]
+  itens_compra_marca ItemCompraMarca[]
 
   @@map("operacoes")
 }
@@ -85,6 +87,7 @@ model Cliente {
   operacao   Operacao    @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
   contas     Conta[]
   encomendas Encomenda[]
+  itens_compra_marca ItemCompraMarca[]
 
   @@index([operacao_id])
   @@index([operacao_id, nome])
@@ -121,10 +124,11 @@ model Encomenda {
   status      String   @default("AGUARDANDO_FABRICA")
   criado_em   DateTime @default(now())
 
-  cliente  Cliente     @relation(fields: [cliente_id], references: [id], onDelete: Restrict)
-  operacao Operacao    @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
-  contas   Conta[]
-  itens    ItemConta[]
+  cliente            Cliente           @relation(fields: [cliente_id], references: [id], onDelete: Restrict)
+  operacao           Operacao          @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+  contas             Conta[]
+  itens              ItemConta[]
+  itens_compra_marca ItemCompraMarca[]
 
   @@index([operacao_id])
   @@index([cliente_id])
@@ -165,8 +169,9 @@ model Marca {
   criado_em         DateTime @default(now())
   atualizado_em     DateTime @updatedAt
 
-  operacao Operacao  @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
-  produtos Produto[]
+  operacao      Operacao      @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+  produtos      Produto[]
+  compras_marca CompraMarca[]
 
   @@index([operacao_id])
   @@index([operacao_id, nome])
@@ -191,6 +196,7 @@ model Produto {
   itens_estoque         EstoqueItem[]
   movimentacoes_estoque MovimentacaoEstoque[]
   itens_conta           ItemConta[]
+  itens_compra_marca    ItemCompraMarca[]
 
   @@index([operacao_id])
   @@index([operacao_id, codigo_barras])
@@ -248,4 +254,56 @@ model MovimentacaoEstoque {
   @@index([estoque_item_id])
   @@map("movimentacoes_estoque")
 }
+
+model CompraMarca {
+  id            String   @id
+  operacao_id   String
+  marca_id      String
+  numero_pedido String?
+  observacoes   String?
+  status        String   @default("PEDIDO_REGISTRADO")
+  data_pedido   DateTime @default(now())
+  criado_em     DateTime @default(now())
+  atualizado_em DateTime @updatedAt
+
+  operacao Operacao          @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+  marca    Marca             @relation(fields: [marca_id], references: [id], onDelete: Restrict)
+  itens    ItemCompraMarca[]
+
+  @@index([operacao_id])
+  @@index([marca_id])
+  @@index([operacao_id, status])
+  @@map("compras_marca")
+}
+
+model ItemCompraMarca {
+  id                      String   @id
+  operacao_id             String
+  compra_id               String
+  produto_id              String
+  destinacao              String // "CLIENTE" | "PRONTA_ENTREGA"
+  quantidade              Int
+  quantidade_recebida     Int      @default(0)
+  cliente_id              String?
+  encomenda_id            String?
+  item_conta_id           String?
+  custo_unitario_centavos  Int?
+  origem_custo            String   @default("DESCONHECIDO")
+  criado_em               DateTime @default(now())
+  atualizado_em           DateTime @updatedAt
+
+  operacao  Operacao    @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+  compra    CompraMarca @relation(fields: [compra_id], references: [id], onDelete: Cascade)
+  produto   Produto     @relation(fields: [produto_id], references: [id], onDelete: Restrict)
+  cliente   Cliente?    @relation(fields: [cliente_id], references: [id], onDelete: SetNull)
+  encomenda Encomenda?  @relation(fields: [encomenda_id], references: [id], onDelete: SetNull)
+
+  @@index([operacao_id])
+  @@index([compra_id])
+  @@index([produto_id])
+  @@index([cliente_id])
+  @@index([encomenda_id])
+  @@map("itens_compra_marca")
+}
+
 

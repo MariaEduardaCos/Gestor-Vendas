@@ -5,7 +5,7 @@ import { DomainError, createProblemDetails } from '../errors/problem-details.js'
 export type StatusEntregaItem = 'AGUARDANDO_FABRICA' | 'RESERVADO_PRESENTE' | 'ENTREGUE' | 'CANCELADO';
 export type StatusConta = 'ABERTA' | 'PARCIALMENTE_PAGA' | 'QUITADA' | 'CANCELADA';
 export type StatusEncomenda = 'AGUARDANDO_FABRICA' | 'PARCIALMENTE_RECEBIDO' | 'RECEBIDO' | 'CANCELADO';
-export type OrigemCustoItem = 'INFORMADO_MANUAL' | 'ESTIMADO_PERCENTUAL' | 'DESCONHECIDO';
+export type OrigemCustoItem = 'INFORMADO_MANUAL' | 'ESTIMADO_PERCENTUAL' | 'TABELA_ORIGINAL' | 'DESCONHECIDO';
 
 export interface ItemContaProps {
   id?: string;
