@@ -15,6 +15,9 @@ model Operacao {
   operadores       Operador[]
   registros_audit  RegistroAuditoria[]
   recursos_exemplo RecursoExemplo[]
+  clientes         Cliente[]
+  contas           Conta[]
+  encomendas       Encomenda[]
 
   @@map("operacoes")
 }
@@ -62,4 +65,57 @@ model RecursoExemplo {
 
   @@index([operacao_id])
   @@map("recursos_exemplo")
+}
+
+model Cliente {
+  id                     String   @id
+  operacao_id            String
+  nome                   String
+  telefone               String?
+  endereco               String?
+  saldo_credito_centavos Int      @default(0)
+  criado_em              DateTime @default(now())
+  atualizado_em          DateTime @updatedAt
+
+  operacao   Operacao    @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+  contas     Conta[]
+  encomendas Encomenda[]
+
+  @@index([operacao_id])
+  @@index([operacao_id, nome])
+  @@index([operacao_id, telefone])
+  @@map("clientes")
+}
+
+model Conta {
+  id          String   @id
+  operacao_id String
+  cliente_id  String
+  valor_total Int      @default(0)
+  total_pago  Int      @default(0)
+  status      String   @default("ABERTA")
+  criado_em   DateTime @default(now())
+
+  cliente  Cliente  @relation(fields: [cliente_id], references: [id], onDelete: Restrict)
+  operacao Operacao @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+
+  @@index([operacao_id])
+  @@index([cliente_id])
+  @@map("contas")
+}
+
+model Encomenda {
+  id          String   @id
+  operacao_id String
+  cliente_id  String
+  descricao   String?
+  status      String   @default("AGUARDANDO_FABRICA")
+  criado_em   DateTime @default(now())
+
+  cliente  Cliente  @relation(fields: [cliente_id], references: [id], onDelete: Restrict)
+  operacao Operacao @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+
+  @@index([operacao_id])
+  @@index([cliente_id])
+  @@map("encomendas")
 }

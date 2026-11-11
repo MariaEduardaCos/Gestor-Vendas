@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import type { FastifyPluginAsync } from 'fastify';
-import { createProblemDetails } from '@consultorasync/core';
+import { createProblemDetails, gerarUuidV7 } from '@consultorasync/core';
 import { createSessionToken } from '../plugins/session.js';
 
 interface LoginBody {
@@ -129,5 +129,56 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     preHandler: fastify.requireSession
   }, async (_request, reply) => {
     return reply.status(200).send({ success: true });
+  });
+
+  // Bootstrap de sessão de desenvolvimento para Dona Sônia
+  fastify.post('/api/auth/dev-session', async (_request, reply) => {
+    let operacao = await fastify.prisma.operacao.findFirst({
+      where: { nome: { contains: 'Beleza Viva' } }
+    });
+
+    if (!operacao) {
+      operacao = await fastify.prisma.operacao.findFirst();
+    }
+
+    if (!operacao) {
+      operacao = await fastify.prisma.operacao.create({
+        data: {
+          id: gerarUuidV7(),
+          nome: 'Consultoria Beleza Viva (Dona Sônia)'
+        }
+      });
+    }
+
+    let operador = await fastify.prisma.operador.findFirst({
+      where: { operacao_id: operacao.id, nome: { contains: 'Sônia' } }
+    });
+
+    if (!operador) {
+      operador = await fastify.prisma.operador.create({
+        data: {
+          id: gerarUuidV7(),
+          operacao_id: operacao.id,
+          nome: 'Dona Sônia',
+          ativo: true
+        }
+      });
+    }
+
+    const token = createSessionToken({
+      operacao_id: operacao.id,
+      operador_id: operador.id,
+      operador_nome: operador.nome
+    });
+
+    return reply.status(200).send({
+      token,
+      session: {
+        operacao_id: operacao.id,
+        operador_id: operador.id,
+        operador_nome: operador.nome,
+        criado_em: new Date().toISOString()
+      }
+    });
   });
 };

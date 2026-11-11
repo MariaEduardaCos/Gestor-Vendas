@@ -8,7 +8,10 @@ import {
   gerarUuidV7,
   validarUuid,
   unauthorizedError,
-  forbiddenError
+  forbiddenError,
+  Cliente,
+  formatarTelefone,
+  sanitizarTelefone
 } from '../src/index.js';
 
 describe('Core Domain & Value Objects', () => {
@@ -74,5 +77,68 @@ describe('Core Domain & Value Objects', () => {
     expect(err.problem.status).toBe(401);
     expect(err.problem.code).toBe('UNAUTHORIZED');
     expect(err.problem.type).toBe('https://consultorasync.app/errors/unauthorized');
+  });
+
+  it('deve instanciar e validar entidade Cliente', () => {
+    const cliente = new Cliente({
+      operacaoId: 'op-123',
+      nome: '  Carla Vizinha  ',
+      telefone: '64998765432',
+      endereco: 'Rua das Flores, 123'
+    });
+
+    expect(cliente.id).toBeDefined();
+    expect(validarUuid(cliente.id)).toBe(true);
+    expect(cliente.operacaoId).toBe('op-123');
+    expect(cliente.nome).toBe('Carla Vizinha');
+    expect(cliente.telefone).toBe('64998765432');
+    expect(cliente.telefoneFormatado).toBe('(64) 99876-5432');
+    expect(cliente.endereco).toBe('Rua das Flores, 123');
+    expect(cliente.saldoCreditoCentavos).toBe(0);
+
+    // Validações obrigatórias
+    expect(() => new Cliente({ operacaoId: '', nome: 'Ana' })).toThrow();
+    expect(() => new Cliente({ operacaoId: 'op-1', nome: '   ' })).toThrow();
+    expect(() => new Cliente({ operacaoId: 'op-1', nome: 'Ana', saldoCreditoCentavos: -10 })).toThrow();
+
+    // Valores em branco/espaços devem normalizar para null
+    const clienteEspacos = new Cliente({
+      operacaoId: 'op-1',
+      nome: 'Cliente Espaços',
+      telefone: '   ',
+      endereco: '   '
+    });
+    expect(clienteEspacos.telefone).toBeNull();
+    expect(clienteEspacos.endereco).toBeNull();
+
+    clienteEspacos.atualizar({ telefone: '   ', endereco: '   ' });
+    expect(clienteEspacos.telefone).toBeNull();
+    expect(clienteEspacos.endereco).toBeNull();
+  });
+
+  it('deve atualizar dados do Cliente e gerenciar crédito', () => {
+    const cliente = new Cliente({
+      operacaoId: 'op-1',
+      nome: 'Bia Santos'
+    });
+
+    cliente.atualizar({ nome: 'Bia Santos Silva', telefone: '(64) 98888-1111' });
+    expect(cliente.nome).toBe('Bia Santos Silva');
+    expect(cliente.telefone).toBe('(64) 98888-1111');
+
+    cliente.adicionarCredito(5000); // R$ 50,00
+    expect(cliente.saldoCreditoCentavos).toBe(5000);
+
+    cliente.debitarCredito(2000); // R$ 20,00
+    expect(cliente.saldoCreditoCentavos).toBe(3000);
+
+    expect(() => cliente.debitarCredito(4000)).toThrow('Saldo de crédito insuficiente');
+  });
+
+  it('deve formatar e sanitizar telefones corretamente', () => {
+    expect(formatarTelefone('64998765432')).toBe('(64) 99876-5432');
+    expect(formatarTelefone('6433221100')).toBe('(64) 3322-1100');
+    expect(sanitizarTelefone('(64) 99876-5432')).toBe('64998765432');
+    expect(sanitizarTelefone('')).toBeNull();
   });
 });

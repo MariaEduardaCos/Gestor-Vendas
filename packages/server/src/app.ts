@@ -5,6 +5,7 @@ import { createProblemDetails, DomainError } from '@consultorasync/core';
 import { sessionPlugin } from './plugins/session.js';
 import { authRoutes } from './routes/auth.js';
 import { operacionalRoutes } from './routes/operacional.js';
+import { clientesRoutes } from './routes/clientes.js';
 
 export interface BuildAppOptions {
   prisma?: PrismaClient;
@@ -30,6 +31,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   // Routes
   app.register(authRoutes);
   app.register(operacionalRoutes);
+  app.register(clientesRoutes);
 
   // Global Error Handler conforme RFC 7807
   app.setErrorHandler((error: FastifyError | Error, request, reply) => {
