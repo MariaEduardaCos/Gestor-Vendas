@@ -1,5 +1,6 @@
 import fastify, { FastifyInstance, FastifyError } from 'fastify';
 import cors from '@fastify/cors';
+import fastifyWebsocket from '@fastify/websocket';
 import { PrismaClient } from '@prisma/client';
 import { createProblemDetails, DomainError } from '@consultorasync/core';
 import { sessionPlugin } from './plugins/session.js';
@@ -9,6 +10,7 @@ import { clientesRoutes } from './routes/clientes.js';
 import { marcasRoutes } from './routes/marcas.js';
 import { produtosRoutes } from './routes/produtos.js';
 import { estoqueRoutes } from './routes/estoque.js';
+import { pareamentoRoutes } from './routes/pareamento.js';
 
 export interface BuildAppOptions {
   prisma?: PrismaClient;
@@ -28,6 +30,9 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     credentials: true
   });
 
+  // WebSocket Hub
+  app.register(fastifyWebsocket);
+
   // Session Plugin
   app.register(sessionPlugin);
 
@@ -38,6 +43,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(marcasRoutes);
   app.register(produtosRoutes);
   app.register(estoqueRoutes);
+  app.register(pareamentoRoutes);
 
   // Global Error Handler conforme RFC 7807
   app.setErrorHandler((error: FastifyError | Error, request, reply) => {

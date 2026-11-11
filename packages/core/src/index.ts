@@ -9,4 +9,5 @@ export * from './domain/marca.js';
 export * from './domain/produto.js';
 export * from './domain/estoque.js';
 export * from './domain/scanner.js';
+export * from './domain/pareamento.js';
 export * from './errors/problem-details.js';

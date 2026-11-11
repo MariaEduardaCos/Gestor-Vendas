@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { VisorLeituraHibrido } from './VisorLeituraHibrido';
+import { PainelPareamentoDesktop } from './PainelPareamentoDesktop';
 import { ProdutoModal } from './ProdutoModal';
 import type { ProdutoDTO } from '../types/produto';
 
@@ -9,6 +10,7 @@ interface VisorViewProps {
 }
 
 export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorViewProps) {
+  const [modoLeitura, setModoLeitura] = useState<'LOCAL' | 'REMOTO'>('LOCAL');
   const [produtosBipados, setProdutosBipados] = useState<ProdutoDTO[]>([]);
   const [ultimoProdutoLido, setUltimoProdutoLido] = useState<ProdutoDTO | null>(null);
   const [consultandoCodigo, setConsultandoCodigo] = useState(false);
@@ -90,16 +92,41 @@ export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorV
 
   return (
     <div className="flex flex-col gap-4 pb-6">
-      {/* Cabeçalho da Tela com Instrução Clara */}
-      <div className="bg-surface-raised border border-border-hairline rounded-lg p-4 shadow-sm flex items-center justify-between">
+      {/* Cabeçalho da Tela com Alternador entre Leitor Local e Celular Remoto */}
+      <div className="bg-surface-raised border border-border-hairline rounded-lg p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-title-lg font-bold text-ink-primary">Leitor / Visor de Produtos</h2>
           <p className="text-body-md text-ink-secondary">
-            Modo contínuo • Aponte o código para conferir estoque e detalhes
+            {modoLeitura === 'LOCAL'
+              ? 'Modo contínuo • Aponte o código para conferir estoque e detalhes'
+              : 'Pareamento efêmero ativo • Celular transmitindo bips para o computador'}
           </p>
         </div>
-        <div className="w-10 h-10 rounded-full bg-brand-subtle flex items-center justify-center text-xl shrink-0">
-          🔍
+
+        {/* Alternador de Modo de Leitura (Local vs Pareado) */}
+        <div className="flex items-center gap-1 bg-surface-sunken p-1 rounded-lg border border-border-hairline shrink-0">
+          <button
+            type="button"
+            onClick={() => setModoLeitura('LOCAL')}
+            className={`min-h-[44px] px-3 py-1.5 rounded-md font-semibold text-label-strong text-sm transition-colors flex items-center gap-1.5 ${
+              modoLeitura === 'LOCAL'
+                ? 'bg-surface-raised text-ink-primary shadow-xs'
+                : 'text-ink-secondary hover:text-ink-primary'
+            }`}
+          >
+            <span>📷</span> Câmera Local
+          </button>
+          <button
+            type="button"
+            onClick={() => setModoLeitura('REMOTO')}
+            className={`min-h-[44px] px-3 py-1.5 rounded-md font-semibold text-label-strong text-sm transition-colors flex items-center gap-1.5 ${
+              modoLeitura === 'REMOTO'
+                ? 'bg-brand-primary text-ink-inverse shadow-xs'
+                : 'text-ink-secondary hover:text-ink-primary'
+            }`}
+          >
+            <span>📱</span> Parear Celular
+          </button>
         </div>
       </div>
 
@@ -117,14 +144,21 @@ export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorV
         </div>
       )}
 
-      {/* Visor Híbrido com Câmera Auto-Start e Campo Manual (UX-DR2, FR-007, FR-009) */}
-      <VisorLeituraHibrido
-        onCodigoLido={handleCodigoLido}
-        autoStart={true}
-        pausado={Boolean(codigoNaoCadastrado || modalCadastroAberto)}
-        emiteSom={true}
-        placeholderManual="Ex: 7891234567890 ou digite o código/nome..."
-      />
+      {/* Exibição do Visor Local ou Painel de Pareamento Desktop */}
+      {modoLeitura === 'LOCAL' ? (
+        <VisorLeituraHibrido
+          onCodigoLido={handleCodigoLido}
+          autoStart={true}
+          pausado={Boolean(codigoNaoCadastrado || modalCadastroAberto)}
+          emiteSom={true}
+          placeholderManual="Ex: 7891234567890 ou digite o código/nome..."
+        />
+      ) : (
+        <PainelPareamentoDesktop
+          sessionToken={sessionToken}
+          onCodigoLido={handleCodigoLido}
+        />
+      )}
 
       {/* Indicador de Consulta em Andamento */}
       {consultandoCodigo && (

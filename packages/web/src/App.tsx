@@ -4,9 +4,17 @@ import { ClienteDrawer } from './components/ClienteDrawer';
 import { ClienteFichaModal } from './components/ClienteFichaModal';
 import { ProdutosView } from './components/ProdutosView';
 import { VisorView } from './components/VisorView';
+import { LeitorRemotoMobileView } from './components/LeitorRemotoMobileView';
 import type { ClienteDTO } from './types/cliente';
 
 export function App() {
+  // Detecta se a página foi aberta no celular via leitura de QR Code efêmero (AD-6)
+  const [leitorToken] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('leitor_token') || params.get('t') || null;
+  });
+
   const [operadorNome] = useState('Dona Sônia');
   const [operacaoNome] = useState('Consultoria Beleza Viva');
   const [abaAtiva, setAbaAtiva] = useState<'inicio' | 'leitor' | 'produtos' | 'clientes'>('inicio');
@@ -26,8 +34,10 @@ export function App() {
   const [clienteSelecionadoFluxo, setClienteSelecionadoFluxo] = useState<ClienteDTO | null>(null);
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null);
 
-  // Bootstrap automático da sessão dev para Dona Sônia
+  // Bootstrap automático da sessão dev para Dona Sônia (apenas se não estiver no leitor remoto móvel)
   useEffect(() => {
+    if (leitorToken) return;
+
     if (!sessionToken) {
       fetch('/api/auth/dev-session', { method: 'POST' })
         .then((res) => (res.ok ? res.json() : null))
@@ -41,7 +51,19 @@ export function App() {
           console.warn('Bootstrap dev-session:', err);
         });
     }
-  }, [sessionToken]);
+  }, [sessionToken, leitorToken]);
+
+  // Se a URL contém token de pareamento efêmero, abre a tela do celular sem login (AD-6, FR-014)
+  if (leitorToken) {
+    return (
+      <LeitorRemotoMobileView
+        token={leitorToken}
+        onSair={() => {
+          window.location.href = window.location.pathname;
+        }}
+      />
+    );
+  }
 
   const handleClienteCriadoNaGaveta = (novoCliente: ClienteDTO) => {
     setClienteRecemCriado(novoCliente);
@@ -186,6 +208,11 @@ export function App() {
             {/* Indicadores de Conformidade */}
             <div className="bg-surface-raised border border-border-hairline rounded-lg p-5 shadow-sm flex flex-col gap-3">
               <h3 className="text-title-md text-ink-primary font-bold">Indicadores de Conformidade</h3>
+
+              <div className="flex items-center justify-between p-3 bg-surface-sunken rounded-md">
+                <span className="text-body-md text-ink-primary">Pareamento Efêmero com WebSocket</span>
+                <span className="text-meta font-semibold text-brand-primary">Ativo (AD-6, FR-014)</span>
+              </div>
 
               <div className="flex items-center justify-between p-3 bg-surface-sunken rounded-md">
                 <span className="text-body-md text-ink-primary">Visor Híbrido Zero Cliques</span>
