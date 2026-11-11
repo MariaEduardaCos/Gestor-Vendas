@@ -8,6 +8,7 @@ import { LeitorRemotoMobileView } from './components/LeitorRemotoMobileView';
 import { EncomendaModal } from './components/EncomendaModal';
 import { CompraMarcaModal } from './components/CompraMarcaModal';
 import { ConferenciaCaixaModal } from './components/ConferenciaCaixaModal';
+import { VendaModal } from './components/VendaModal';
 import type { ClienteDTO } from './types/cliente';
 
 export function App() {
@@ -38,6 +39,8 @@ export function App() {
   const [compraMarcaModalAberta, setCompraMarcaModalAberta] = useState(false);
   const [conferenciaModalAberta, setConferenciaModalAberta] = useState(false);
   const [conferenciaCompraId, setConferenciaCompraId] = useState<string | null>(null);
+  const [vendaModalAberta, setVendaModalAberta] = useState(false);
+  const [refreshEstoqueKey, setRefreshEstoqueKey] = useState(0);
   const [clienteRecemCriado, setClienteRecemCriado] = useState<ClienteDTO | null>(null);
   const [clienteSelecionadoFluxo, setClienteSelecionadoFluxo] = useState<ClienteDTO | null>(null);
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null);
@@ -248,6 +251,29 @@ export function App() {
               </button>
             </div>
 
+            {/* Venda de Pronta-Entrega com Bloqueio de Concorrência (S8, Story 4.2) */}
+            <div className="bg-surface-raised border-2 border-status-available/50 rounded-lg p-5 shadow-sm flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-title-md font-bold text-ink-primary">
+                  Venda de Pronta-Entrega (S8)
+                </h3>
+                <span className="text-meta font-bold bg-status-available-bg text-status-available px-2.5 py-1 rounded">
+                  Story 4.2
+                </span>
+              </div>
+              <p className="text-body-md text-ink-secondary">
+                Venda produtos que você tem disponíveis em pronta-entrega. Escolha entre retirada posterior (reserva nominal garantida) ou entrega imediata com saída física do armário.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setVendaModalAberta(true)}
+                className="min-h-touch-target bg-status-available hover:opacity-90 text-white font-bold text-label-strong rounded-md flex items-center justify-center gap-2 shadow-sm transition-all"
+              >
+                <span>🛍️</span> Nova Venda de Pronta-Entrega (S8)
+              </button>
+            </div>
+
             {/* Acesso Rápido ao Catálogo de Produtos e Marcas (S4) */}
             <div className="bg-surface-raised border border-border-hairline rounded-lg p-5 shadow-sm flex flex-col gap-3">
               <div className="flex items-center justify-between">
@@ -330,7 +356,7 @@ export function App() {
           <VisorView sessionToken={sessionToken || undefined} />
         ) : abaAtiva === 'produtos' ? (
           /* Aba de Catálogo de Produtos e Marcas (S4) */
-          <ProdutosView sessionToken={sessionToken || undefined} />
+          <ProdutosView sessionToken={sessionToken || undefined} refreshTrigger={refreshEstoqueKey} />
         ) : (
           /* Aba de Clientes (S2) */
           <ClientesView
@@ -477,6 +503,26 @@ export function App() {
           setRefreshClientesKey((k) => k + 1);
           setRefreshFichaKey((k) => k + 1);
           setMensagemSucesso('Conferência de caixa e estoque físico atualizados com sucesso!');
+          setTimeout(() => setMensagemSucesso(null), 6000);
+        }}
+      />
+
+      {/* Modal de Venda de Pronta-Entrega (S8, Story 4.2) */}
+      <VendaModal
+        isOpen={vendaModalAberta}
+        clientePreSelecionado={clienteSelecionadoFluxo ? { id: clienteSelecionadoFluxo.id, nome: clienteSelecionadoFluxo.nome } : null}
+        sessionToken={sessionToken || undefined}
+        onClose={() => setVendaModalAberta(false)}
+        onAbrirGavetaCliente={() => setDrawerAberto(true)}
+        onVendaConcluida={(resultado) => {
+          setRefreshClientesKey((k) => k + 1);
+          setRefreshFichaKey((k) => k + 1);
+          setRefreshEstoqueKey((k) => k + 1);
+          const totalFormatado = (resultado.conta.valor_total / 100).toLocaleString('pt-BR', {
+            style: 'currency',
+            currency: 'BRL'
+          });
+          setMensagemSucesso(`Venda confirmada para ${resultado.conta.cliente_nome}! Total: ${totalFormatado}`);
           setTimeout(() => setMensagemSucesso(null), 6000);
         }}
       />
