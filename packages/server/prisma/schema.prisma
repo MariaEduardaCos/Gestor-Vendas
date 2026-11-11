@@ -18,6 +18,8 @@ model Operacao {
   clientes         Cliente[]
   contas           Conta[]
   encomendas       Encomenda[]
+  marcas           Marca[]
+  produtos         Produto[]
 
   @@map("operacoes")
 }
@@ -119,3 +121,43 @@ model Encomenda {
   @@index([cliente_id])
   @@map("encomendas")
 }
+
+model Marca {
+  id                String   @id
+  operacao_id       String
+  nome              String
+  percentual_padrao Float?
+  criado_em         DateTime @default(now())
+  atualizado_em     DateTime @updatedAt
+
+  operacao Operacao  @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+  produtos Produto[]
+
+  @@index([operacao_id])
+  @@index([operacao_id, nome])
+  @@map("marcas")
+}
+
+model Produto {
+  id                   String   @id
+  operacao_id          String
+  marca_id             String?
+  nome                 String
+  variante             String?
+  codigo_barras        String?
+  preco_venda_centavos Int
+  custo_centavos       Int?
+  proveniencia_custo   String   @default("DESCONHECIDO")
+  criado_em            DateTime @default(now())
+  atualizado_em        DateTime @updatedAt
+
+  operacao Operacao @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+  marca    Marca?   @relation(fields: [marca_id], references: [id], onDelete: SetNull)
+
+  @@index([operacao_id])
+  @@index([operacao_id, codigo_barras])
+  @@index([operacao_id, nome])
+  @@index([marca_id])
+  @@map("produtos")
+}
+

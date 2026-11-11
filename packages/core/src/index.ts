@@ -5,4 +5,6 @@ export * from './domain/auditoria.js';
 export * from './value-objects/centavos.js';
 export * from './value-objects/uuid.js';
 export * from './domain/cliente.js';
+export * from './domain/marca.js';
+export * from './domain/produto.js';
 export * from './errors/problem-details.js';

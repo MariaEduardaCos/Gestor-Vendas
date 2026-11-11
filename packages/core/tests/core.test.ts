@@ -11,7 +11,9 @@ import {
   forbiddenError,
   Cliente,
   formatarTelefone,
-  sanitizarTelefone
+  sanitizarTelefone,
+  Marca,
+  Produto
 } from '../src/index.js';
 
 describe('Core Domain & Value Objects', () => {
@@ -141,4 +143,179 @@ describe('Core Domain & Value Objects', () => {
     expect(sanitizarTelefone('(64) 99876-5432')).toBe('64998765432');
     expect(sanitizarTelefone('')).toBeNull();
   });
+
+  it('deve instanciar e validar entidade Marca', () => {
+    const marca = new Marca({
+      operacaoId: 'op-1',
+      nome: 'Natura',
+      percentualPadrao: 30
+    });
+
+    expect(marca.id).toBeDefined();
+    expect(validarUuid(marca.id)).toBe(true);
+    expect(marca.operacaoId).toBe('op-1');
+    expect(marca.nome).toBe('Natura');
+    expect(marca.percentualPadrao).toBe(30);
+
+    marca.atualizar({ percentualPadrao: 35 });
+    expect(marca.percentualPadrao).toBe(35);
+
+    marca.atualizar({ percentualPadrao: null });
+    expect(marca.percentualPadrao).toBeNull();
+
+    expect(() => new Marca({ operacaoId: '', nome: 'Avon' })).toThrow();
+    expect(() => new Marca({ operacaoId: 'op-1', nome: '' })).toThrow();
+    expect(() => new Marca({ operacaoId: 'op-1', nome: 'Avon', percentualPadrao: -5 })).toThrow();
+    expect(() => new Marca({ operacaoId: 'op-1', nome: 'Avon', percentualPadrao: 105 })).toThrow();
+  });
+
+  it('deve calcular custo estimado a partir do percentual da marca (FR-011, D-01)', () => {
+    // Given um produto cadastrado com preço de venda R$ 100,00 e uma marca cadastrada com percentual de lucro de 30%
+    const produto = new Produto({
+      operacaoId: 'op-1',
+      nome: 'Hidratante Tododia Algodão',
+      precoVendaCentavos: 10000, // R$ 100,00
+      percentualDescontoMarca: 30
+    });
+
+    // When o custo estimado for calculado, then o sistema registra custo estimado de R$ 70,00 com proveniência ESTIMADO_PERCENTUAL
+    expect(produto.precoVendaCentavos).toBe(10000);
+    expect(produto.custoCentavos).toBe(7000);
+    expect(produto.provenienciaCusto).toBe('ESTIMADO_PERCENTUAL');
+    expect(produto.precoVendaFormatado).toContain('100,00');
+    expect(produto.custoFormatado).toContain('70,00');
+  });
+
+  it('deve priorizar custo manual informado e validar valores não negativos (FR-011)', () => {
+    const produto = new Produto({
+      operacaoId: 'op-1',
+      nome: 'Perfume Essencial',
+      precoVendaCentavos: 20000, // R$ 200,00
+      custoManualCentavos: 12000, // R$ 120,00
+      percentualDescontoMarca: 30 // Mesmo tendo marca, manual prevalece
+    });
+
+    expect(produto.custoCentavos).toBe(12000);
+    expect(produto.provenienciaCusto).toBe('INFORMADO_MANUAL');
+    expect(produto.custoFormatado).toContain('120,00');
+
+    expect(() => new Produto({
+      operacaoId: 'op-1',
+      nome: 'Perfume',
+      precoVendaCentavos: 10000,
+      custoManualCentavos: -500
+    })).toThrow();
+  });
+
+  it('deve registrar custo NULL e proveniencia DESCONHECIDO se ausente percentual e custo manual (FR-012, AD-2)', () => {
+    // Proibido gravar 0,00 ou deduzir percentuais fictícios
+    const produto = new Produto({
+      operacaoId: 'op-1',
+      nome: 'Produto Sem Custo',
+      precoVendaCentavos: 5000
+    });
+
+    expect(produto.custoCentavos).toBeNull();
+    expect(produto.provenienciaCusto).toBe('DESCONHECIDO');
+    expect(produto.custoFormatado).toBe('Desconhecido');
+  });
+
+  it('deve validar preço de venda estritamente positivo e inteiro', () => {
+    expect(() => new Produto({
+      operacaoId: 'op-1',
+      nome: 'Produto Zero',
+      precoVendaCentavos: 0
+    })).toThrow();
+
+    expect(() => new Produto({
+      operacaoId: 'op-1',
+      nome: 'Produto Negativo',
+      precoVendaCentavos: -100
+    })).toThrow();
+
+    expect(() => new Produto({
+      operacaoId: 'op-1',
+      nome: 'Produto Decimal',
+      precoVendaCentavos: 49.99 as any
+    })).toThrow();
+  });
+
+  it('variantes do mesmo produto recebem UUIDs v7 distintos e não se agrupam (FR-006)', () => {
+    const v1 = new Produto({
+      operacaoId: 'op-1',
+      nome: 'Hidratante Tododia',
+      variante: 'Algodão 400ml',
+      precoVendaCentavos: 6000
+    });
+
+    const v2 = new Produto({
+      operacaoId: 'op-1',
+      nome: 'Hidratante Tododia',
+      variante: 'Macadâmia Refil',
+      precoVendaCentavos: 4500
+    });
+
+    expect(v1.id).not.toBe(v2.id);
+    expect(validarUuid(v1.id)).toBe(true);
+    expect(validarUuid(v2.id)).toBe(true);
+    expect(v1.nome).toBe(v2.nome);
+    expect(v1.variante).toBe('Algodão 400ml');
+    expect(v2.variante).toBe('Macadâmia Refil');
+  });
+
+  it('deve armazenar null para marcaId com espaços em branco', () => {
+    const prod = new Produto({
+      operacaoId: 'op-1',
+      marcaId: '   ',
+      nome: 'Sabonete',
+      precoVendaCentavos: 1500
+    });
+    expect(prod.marcaId).toBeNull();
+
+    prod.atualizar({ marcaId: '    ' });
+    expect(prod.marcaId).toBeNull();
+  });
+
+  it('deve preservar custo manual ao alterar preço ou detalhes em produto INFORMADO_MANUAL', () => {
+    const prod = new Produto({
+      operacaoId: 'op-1',
+      nome: 'Perfume Kaiak',
+      precoVendaCentavos: 10000,
+      custoManualCentavos: 6500
+    });
+    expect(prod.custoCentavos).toBe(6500);
+    expect(prod.provenienciaCusto).toBe('INFORMADO_MANUAL');
+
+    // Atualiza apenas o nome
+    prod.atualizar({ nome: 'Perfume Kaiak Masculino' });
+    expect(prod.custoCentavos).toBe(6500);
+    expect(prod.provenienciaCusto).toBe('INFORMADO_MANUAL');
+
+    // Atualiza o preço sem passar parâmetros de custo
+    prod.atualizar({ precoVendaCentavos: 12000 });
+    expect(prod.custoCentavos).toBe(6500);
+    expect(prod.provenienciaCusto).toBe('INFORMADO_MANUAL');
+  });
+
+  it('deve recalcular custo ao alterar preço em produto ESTIMADO_PERCENTUAL', () => {
+    const prod = new Produto({
+      operacaoId: 'op-1',
+      nome: 'Hidratante Tododia',
+      precoVendaCentavos: 10000,
+      percentualDescontoMarca: 30
+    });
+    expect(prod.custoCentavos).toBe(7000);
+    expect(prod.provenienciaCusto).toBe('ESTIMADO_PERCENTUAL');
+
+    // Atualiza apenas variante: custo preservado
+    prod.atualizar({ variante: 'Macadâmia' });
+    expect(prod.custoCentavos).toBe(7000);
+    expect(prod.provenienciaCusto).toBe('ESTIMADO_PERCENTUAL');
+
+    // Atualiza preço: 30% sobre 20000 = 14000
+    prod.atualizar({ precoVendaCentavos: 20000 });
+    expect(prod.custoCentavos).toBe(14000);
+    expect(prod.provenienciaCusto).toBe('ESTIMADO_PERCENTUAL');
+  });
 });
+

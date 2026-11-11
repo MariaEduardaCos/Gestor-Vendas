@@ -6,6 +6,8 @@ import { sessionPlugin } from './plugins/session.js';
 import { authRoutes } from './routes/auth.js';
 import { operacionalRoutes } from './routes/operacional.js';
 import { clientesRoutes } from './routes/clientes.js';
+import { marcasRoutes } from './routes/marcas.js';
+import { produtosRoutes } from './routes/produtos.js';
 
 export interface BuildAppOptions {
   prisma?: PrismaClient;
@@ -32,6 +34,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(authRoutes);
   app.register(operacionalRoutes);
   app.register(clientesRoutes);
+  app.register(marcasRoutes);
+  app.register(produtosRoutes);
 
   // Global Error Handler conforme RFC 7807
   app.setErrorHandler((error: FastifyError | Error, request, reply) => {

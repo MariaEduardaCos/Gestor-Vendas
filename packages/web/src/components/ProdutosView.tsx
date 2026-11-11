@@ -1,0 +1,301 @@
+import { useState, useEffect } from 'react';
+import type { ProdutoDTO } from '../types/produto';
+import { ProdutoModal } from './ProdutoModal';
+import { MarcasModal } from './MarcasModal';
+
+interface ProdutosViewProps {
+  sessionToken?: string;
+  refreshTrigger?: number;
+}
+
+export function ProdutosView({ sessionToken, refreshTrigger }: ProdutosViewProps) {
+  const [produtos, setProdutos] = useState<ProdutoDTO[]>([]);
+  const [busca, setBusca] = useState('');
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  // Modais
+  const [produtoModalAberto, setProdutoModalAberto] = useState(false);
+  const [produtoParaEditar, setProdutoParaEditar] = useState<ProdutoDTO | null>(null);
+  const [marcasModalAberto, setMarcasModalAberto] = useState(false);
+
+  // Carrega produtos do catálogo
+  const carregarProdutos = async (termo = '') => {
+    setCarregando(true);
+    setErro(null);
+
+    try {
+      const headers: Record<string, string> = {};
+      if (sessionToken) {
+        headers['Authorization'] = `Bearer ${sessionToken}`;
+      }
+
+      const query = termo.trim() ? `?busca=${encodeURIComponent(termo.trim())}` : '';
+      const res = await fetch(`/api/produtos${query}`, { headers });
+
+      if (!res.ok) {
+        throw new Error('Falha ao consultar catálogo de produtos.');
+      }
+
+      const data = await res.json();
+      setProdutos(data);
+    } catch (err: any) {
+      setErro(err.message || 'Erro ao carregar produtos.');
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  useEffect(() => {
+    carregarProdutos(busca);
+  }, [sessionToken, refreshTrigger]);
+
+  const handleBuscar = (e: React.FormEvent) => {
+    e.preventDefault();
+    carregarProdutos(busca);
+  };
+
+  const handleExcluirProduto = async (produto: ProdutoDTO) => {
+    const nomeExibicao = `${produto.nome}${produto.variante ? ` (${produto.variante})` : ''}`;
+    if (!window.confirm(`Deseja realmente remover o produto "${nomeExibicao}" do seu catálogo?`)) {
+      return;
+    }
+
+    try {
+      const headers: Record<string, string> = {};
+      if (sessionToken) {
+        headers['Authorization'] = `Bearer ${sessionToken}`;
+      }
+
+      const res = await fetch(`/api/produtos/${produto.id}`, {
+        method: 'DELETE',
+        headers
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.detail || 'Erro ao excluir produto.');
+      }
+
+      carregarProdutos(busca);
+    } catch (err: any) {
+      alert(err.message || 'Não foi possível excluir o produto.');
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Barra Superior de Ações do Catálogo */}
+      <div className="bg-surface-raised border border-border-hairline rounded-lg p-4 shadow-sm flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-title-lg font-bold text-ink-primary">Catálogo de Produtos</h2>
+            <p className="text-meta text-ink-secondary">
+              Gerencie seus produtos, variantes e precificação com proveniência de custo.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => setMarcasModalAberto(true)}
+              className="flex-1 sm:flex-none min-h-touch-target px-4 bg-surface-base hover:bg-surface-sunken border border-border-strong text-ink-primary font-semibold text-label-strong rounded-md flex items-center justify-center gap-2 shadow-sm transition-colors"
+            >
+              <span>🏷️</span> Marcas & Percentuais
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setProdutoParaEditar(null);
+                setProdutoModalAberto(true);
+              }}
+              className="flex-1 sm:flex-none min-h-touch-target px-4 bg-brand-primary hover:bg-brand-hover text-ink-inverse font-bold text-label-strong rounded-md flex items-center justify-center gap-2 shadow-sm transition-colors"
+            >
+              <span>+</span> Novo Produto
+            </button>
+          </div>
+        </div>
+
+        {/* Campo de Busca Rápida */}
+        <form onSubmit={handleBuscar} className="flex gap-2">
+          <input
+            type="search"
+            value={busca}
+            onChange={(e) => {
+              setBusca(e.target.value);
+              if (e.target.value === '') {
+                carregarProdutos('');
+              }
+            }}
+            placeholder="Buscar por nome, variante ou código de barras..."
+            className="flex-1 min-h-touch-target px-3 border border-border-strong rounded-md bg-surface-base text-ink-primary text-body-md focus:outline-brand-primary"
+          />
+          <button
+            type="submit"
+            className="min-h-touch-target px-4 bg-surface-raised border border-border-strong text-ink-primary font-semibold rounded-md hover:bg-surface-sunken"
+          >
+            Buscar
+          </button>
+        </form>
+      </div>
+
+      {/* Erro */}
+      {erro && (
+        <div className="p-3 bg-status-alert-bg border border-status-alert text-status-alert rounded-md text-body-md">
+          ⚠️ {erro}
+        </div>
+      )}
+
+      {/* Resumo */}
+      <div className="flex items-center justify-between px-1">
+        <span className="text-label-strong text-ink-secondary">
+          {carregando ? 'Buscando produtos...' : `${produtos.length} produtos no catálogo`}
+        </span>
+      </div>
+
+      {/* Lista de Produtos */}
+      {produtos.length === 0 && !carregando ? (
+        <div className="bg-surface-raised border border-dashed border-border-hairline rounded-lg p-8 text-center flex flex-col items-center gap-3">
+          <span className="text-3xl">📦</span>
+          <h3 className="text-title-md font-bold text-ink-primary">Nenhum produto encontrado</h3>
+          <p className="text-body-md text-ink-secondary max-w-sm">
+            {busca.trim()
+              ? `Não encontramos nenhum item com o termo "${busca}".`
+              : 'Você ainda não cadastrou produtos. Cadastre seus hidratantes, perfumes e cosméticos com suas variantes para começar!'}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setProdutoParaEditar(null);
+              setProdutoModalAberto(true);
+            }}
+            className="min-h-touch-target px-6 bg-brand-primary text-ink-inverse font-bold text-label-strong rounded-md mt-2 shadow-sm"
+          >
+            + Cadastrar Primeiro Produto
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {produtos.map((p) => {
+            return (
+              <div
+                key={p.id}
+                className="bg-surface-raised border border-border-hairline rounded-lg p-4 shadow-sm flex flex-col gap-2 hover:border-brand-primary/40 transition-colors"
+              >
+                {/* Topo do Card: Marca e Nome */}
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    {p.marca_nome && (
+                      <span className="text-meta font-bold uppercase tracking-wider text-brand-primary block">
+                        {p.marca_nome}
+                      </span>
+                    )}
+                    <h3 className="text-title-md font-bold text-ink-primary leading-snug">
+                      {p.nome}
+                      {p.variante && (
+                        <span className="text-ink-secondary font-normal ml-1">
+                          — {p.variante}
+                        </span>
+                      )}
+                    </h3>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProdutoParaEditar(p);
+                        setProdutoModalAberto(true);
+                      }}
+                      className="p-2 text-ink-secondary hover:text-brand-primary text-meta font-semibold rounded-md hover:bg-surface-sunken"
+                      title="Editar Produto"
+                    >
+                      ✏️ Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleExcluirProduto(p)}
+                      className="p-2 text-status-alert hover:text-red-700 text-meta font-semibold rounded-md hover:bg-status-alert-bg"
+                      title="Excluir Produto"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+
+                {/* Código de barras se houver */}
+                {p.codigo_barras && (
+                  <div className="text-meta text-ink-muted flex items-center gap-1">
+                    <span>EAN:</span>
+                    <span className="font-mono">{p.codigo_barras}</span>
+                  </div>
+                )}
+
+                {/* Linha de Preço e Custo */}
+                <div className="pt-2 border-t border-border-hairline flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span className="text-meta text-ink-secondary block">Preço de Venda</span>
+                    <span className="text-title-lg font-bold text-ink-primary">
+                      {p.preco_venda_formatado}
+                    </span>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-meta text-ink-secondary block">Custo Estimado</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-body-lg font-semibold text-ink-primary">
+                        {p.custo_formatado}
+                      </span>
+                      <span
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                          p.proveniencia_custo === 'ESTIMADO_PERCENTUAL'
+                            ? 'bg-status-waiting-bg text-status-waiting'
+                            : p.proveniencia_custo === 'INFORMADO_MANUAL'
+                            ? 'bg-status-available-bg text-status-available'
+                            : 'bg-surface-sunken text-ink-secondary'
+                        }`}
+                      >
+                        {p.proveniencia_custo === 'ESTIMADO_PERCENTUAL' && 'Marca'}
+                        {p.proveniencia_custo === 'INFORMADO_MANUAL' && 'Manual'}
+                        {p.proveniencia_custo === 'DESCONHECIDO' && 'Desconhecido'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modal de Produto */}
+      <ProdutoModal
+        isOpen={produtoModalAberto}
+        produtoParaEditar={produtoParaEditar}
+        onClose={() => {
+          setProdutoModalAberto(false);
+          setProdutoParaEditar(null);
+        }}
+        sessionToken={sessionToken}
+        onProdutoSalvo={() => {
+          carregarProdutos(busca);
+        }}
+        onAbrirGerenciadorMarcas={() => {
+          setProdutoModalAberto(false);
+          setMarcasModalAberto(true);
+        }}
+      />
+
+      {/* Modal de Marcas */}
+      <MarcasModal
+        isOpen={marcasModalAberto}
+        onClose={() => setMarcasModalAberto(false)}
+        sessionToken={sessionToken}
+        onMarcasAtualizadas={() => {
+          carregarProdutos(busca);
+        }}
+      />
+    </div>
+  );
+}

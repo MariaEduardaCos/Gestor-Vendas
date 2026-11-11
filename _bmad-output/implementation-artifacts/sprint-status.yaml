@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 11-10-2026 19:26
-last_updated: 11-11-2026 08:07
+last_updated: 11-11-2026 09:44
 project: Prototipo TCC
 project_key: NOKEY
 tracking_system: file-system
@@ -37,8 +37,8 @@ story_location: _bmad-output/implementation-artifacts
 development_status:
   epic-1: in-progress
   1-1-inicialização-do-monorepo-sessão-operacional-e-isolamento-mu: done
-  1-2-cadastro-edição-e-ficha-de-clientes-com-gaveta-rápida: review
-  1-3-catálogo-de-produtos-variantes-preço-de-venda-e-custo-por-ma: backlog
+  1-2-cadastro-edição-e-ficha-de-clientes-com-gaveta-rápida: done
+  1-3-catálogo-de-produtos-variantes-preço-de-venda-e-custo-por-ma: review
   1-4-lançamento-de-estoque-inicial-por-produto: backlog
   1-5-visor-de-leitura-híbrido-com-câmera-contínua-e-filtro-anti-d: backlog
   1-6-pareamento-efêmero-celular-computador-com-websocket-e-feedba: backlog
