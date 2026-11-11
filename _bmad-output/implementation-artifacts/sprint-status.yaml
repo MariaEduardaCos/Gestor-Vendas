@@ -44,11 +44,11 @@ development_status:
   1-6-pareamento-efêmero-celular-computador-com-websocket-e-feedba: done
   epic-1-retrospective: done
 
-  epic-2: in-progress
+  epic-2: done
   2-1-registro-de-encomenda-individual-por-cliente-e-criação-da-co: done
   2-2-consolidação-da-compra-à-marca-e-separação-entre-clientes-e: done
-  2-3-imutabilidade-e-congelamento-de-preço-de-venda-e-custo-histó: in-progress
-  epic-2-retrospective: optional
+  2-3-imutabilidade-e-congelamento-de-preço-de-venda-e-custo-histó: done
+  epic-2-retrospective: in-progress
 
   epic-3: backlog
   3-1-abertura-da-conferência-de-caixa-e-leitura-com-idempotência: backlog
