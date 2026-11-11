@@ -59,7 +59,7 @@ development_status:
   epic-4: in-progress
   4-1-consulta-do-estoque-com-pílulas-multistatus-coloridas: done
   4-2-venda-de-pronta-entrega-com-bloqueio-de-concorrência-e-reser: done
-  4-3-confirmação-de-entrega-física-total-e-parcial-com-baixa-do-e: backlog
+  4-3-confirmação-de-entrega-física-total-e-parcial-com-baixa-do-e: done
   4-4-cancelamento-com-liberação-de-reserva-e-ajuste-justificado-d: backlog
   epic-4-retrospective: optional
 

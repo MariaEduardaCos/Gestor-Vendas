@@ -5,6 +5,7 @@ import {
   gerarUuidV7,
   createProblemDetails
 } from '@consultorasync/core';
+import { calcularStatusEntregaConta } from './vendas.js';
 
 interface ClienteBody {
   nome: string;
@@ -204,6 +205,7 @@ export const clientesRoutes: FastifyPluginAsync = async (fastify) => {
             total_sem_aguardados: totalSemAguardados,
             saldo_cobravel_hoje: saldoCobravelHoje,
             status: c.status,
+            status_entrega: calcularStatusEntregaConta(c.itens || []),
             criado_em: c.criado_em.toISOString(),
             itens: (c.itens || []).map((i: any) => ({
               id: i.id,

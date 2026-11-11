@@ -39,6 +39,11 @@ export function ClienteFichaModal({
   const [excluindo, setExcluindo] = useState(false);
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
 
+  // Estado de Entrega Física (Story 4.3)
+  const [entregandoItemId, setEntregandoItemId] = useState<string | null>(null);
+  const [entregandoContaId, setEntregandoContaId] = useState<string | null>(null);
+  const [sucesso, setSucesso] = useState<string | null>(null);
+
   useEffect(() => {
     if (isOpen && clienteId) {
       carregarFicha();
@@ -149,6 +154,65 @@ export function ClienteFichaModal({
     }
   };
 
+  const handleEntregarItem = async (contaId: string, itemId: string) => {
+    setEntregandoItemId(itemId);
+    setErro(null);
+    setSucesso(null);
+    try {
+      const headers: Record<string, string> = {};
+      if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
+
+      const res = await fetch(`${apiBaseUrl}/contas/${contaId}/itens/${itemId}/entregar`, {
+        method: 'POST',
+        headers
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.detail || 'Não foi possível confirmar a entrega física do item.');
+      }
+
+      await carregarFicha();
+      setSucesso('Entrega física do item confirmada e estoque baixado!');
+      setTimeout(() => setSucesso(null), 4000);
+      if (onClienteAtualizado) onClienteAtualizado();
+    } catch (err: any) {
+      setErro(err.message);
+    } finally {
+      setEntregandoItemId(null);
+    }
+  };
+
+  const handleEntregarTudo = async (contaId: string) => {
+    setEntregandoContaId(contaId);
+    setErro(null);
+    setSucesso(null);
+    try {
+      const headers: Record<string, string> = {};
+      if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
+
+      const res = await fetch(`${apiBaseUrl}/contas/${contaId}/entregar-tudo`, {
+        method: 'POST',
+        headers
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.detail || 'Não foi possível confirmar a entrega de todos os itens.');
+      }
+
+      const data = await res.json();
+      await carregarFicha();
+      setSucesso(data.mensagem || 'Entrega física confirmada com sucesso!');
+      setTimeout(() => setSucesso(null), 4000);
+      if (onClienteAtualizado) onClienteAtualizado();
+    } catch (err: any) {
+      setErro(err.message);
+    } finally {
+      setEntregandoContaId(null);
+    }
+  };
+
   if (!isOpen) return null;
 
   const formatarMoeda = (centavos: number) => {
@@ -191,6 +255,20 @@ export function ClienteFichaModal({
         {erro && (
           <div className="my-3 bg-status-alert-bg border border-status-alert text-status-alert px-3.5 py-2.5 rounded-md text-body-md font-medium">
             {erro}
+          </div>
+        )}
+
+        {/* Mensagem de Sucesso */}
+        {sucesso && (
+          <div className="my-3 bg-status-available-bg border border-status-available text-status-available px-3.5 py-2.5 rounded-md text-body-md font-medium flex items-center justify-between shadow-sm">
+            <span>✨ {sucesso}</span>
+            <button
+              type="button"
+              onClick={() => setSucesso(null)}
+              className="text-status-available font-bold text-title-md ml-2"
+            >
+              ✕
+            </button>
           </div>
         )}
 
@@ -345,13 +423,15 @@ export function ClienteFichaModal({
                       const cobravelHoje = conta.saldo_cobravel_hoje ?? 0;
                       const temItensAguardando = conta.itens && conta.itens.some((it: any) => it.status_entrega === 'AGUARDANDO_FABRICA');
                       const aguardandoFabrica = temItensAguardando || (Boolean(conta.encomenda_id) && cobravelHoje === 0 && conta.valor_total > 0 && conta.status !== 'QUITADA');
+                      const itensReservados = (conta.itens || []).filter((it: any) => it.status_entrega === 'RESERVADO_PRESENTE');
+                      const temItensParaEntregar = itensReservados.length > 0;
 
                       return (
                         <div
                           key={conta.id}
-                          className="bg-surface-sunken border border-border-hairline p-3.5 rounded-lg flex flex-col gap-1.5"
+                          className="bg-surface-sunken border border-border-hairline p-3.5 rounded-lg flex flex-col gap-2.5"
                         >
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
                             <div className="flex items-center gap-2">
                               <span className="text-body-md font-bold text-ink-primary">
                                 Total: {formatarMoeda(conta.valor_total)}
@@ -365,13 +445,37 @@ export function ClienteFichaModal({
                               >
                                 {conta.status === 'QUITADA' ? 'Quitada' : 'Em Aberto'}
                               </span>
+
+                              {/* Badge de Entrega Consolidado (FR-028, FR-031) */}
+                              {conta.status_entrega && (
+                                <span
+                                  className={`text-meta px-2 py-0.5 rounded-full font-semibold ${
+                                    conta.status_entrega === 'ENTREGUE'
+                                      ? 'bg-status-available-bg text-status-available'
+                                      : conta.status_entrega === 'PARCIALMENTE_ENTREGUE'
+                                      ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                      : conta.status_entrega === 'AGUARDANDO_FABRICA'
+                                      ? 'bg-status-waiting-bg text-status-waiting'
+                                      : 'bg-blue-100 text-blue-800'
+                                  }`}
+                                >
+                                  {conta.status_entrega === 'ENTREGUE'
+                                    ? '✓ Entregue'
+                                    : conta.status_entrega === 'PARCIALMENTE_ENTREGUE'
+                                    ? '⚡ Parcialmente Entregue'
+                                    : conta.status_entrega === 'AGUARDANDO_FABRICA'
+                                    ? '⏳ Aguardando Fábrica'
+                                    : '📦 Disponível'}
+                                </span>
+                              )}
                             </div>
+
                             <span className="text-meta text-ink-muted">
                               {new Date(conta.criado_em).toLocaleDateString('pt-BR')}
                             </span>
                           </div>
 
-                          <div className="flex items-center justify-between text-meta">
+                          <div className="flex items-center justify-between text-meta flex-wrap gap-1">
                             <span className="text-ink-secondary">
                               Pago: {formatarMoeda(conta.total_pago)}
                               {pendente > 0 && ` • Falta Total: ${formatarMoeda(pendente)}`}
@@ -382,8 +486,98 @@ export function ClienteFichaModal({
                           </div>
 
                           {aguardandoFabrica && (
-                            <div className="mt-1 px-2.5 py-1 bg-status-waiting-bg rounded text-meta text-status-waiting font-medium">
+                            <div className="px-2.5 py-1 bg-status-waiting-bg rounded text-meta text-status-waiting font-medium">
                               ⏳ Itens aguardando fábrica: R$ 0,00 cobrável hoje (AD-4)
+                            </div>
+                          )}
+
+                          {/* Botão Entregar Todos Disponíveis (FR-027, FR-031) */}
+                          {temItensParaEntregar && (
+                            <div className="pt-1">
+                              <button
+                                type="button"
+                                onClick={() => handleEntregarTudo(conta.id)}
+                                disabled={entregandoContaId === conta.id}
+                                className="w-full min-h-[48px] px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-colors disabled:opacity-50"
+                              >
+                                {entregandoContaId === conta.id ? (
+                                  <span>Registrando baixa de entrega...</span>
+                                ) : (
+                                  <>
+                                    <span>📦</span>
+                                    <span>Entregar Todos os Disponíveis ({itensReservados.length} item(ns))</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Detalhamento dos Produtos da Conta */}
+                          {conta.itens && conta.itens.length > 0 && (
+                            <div className="mt-1 pt-2 border-t border-border-hairline divide-y divide-border-hairline/60">
+                              <span className="text-[11px] font-bold text-ink-secondary uppercase tracking-wider block mb-1">
+                                Produtos da Conta
+                              </span>
+                              {conta.itens.map((it: any) => {
+                                const isReservado = it.status_entrega === 'RESERVADO_PRESENTE';
+                                const isEntregue = it.status_entrega === 'ENTREGUE';
+                                const isAguardando = it.status_entrega === 'AGUARDANDO_FABRICA';
+                                const subtotal = it.quantidade * it.preco_unitario_centavos;
+
+                                return (
+                                  <div key={it.id} className="py-2 flex items-center justify-between gap-2 text-xs">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="font-semibold text-ink-primary truncate">
+                                        {it.quantidade}x {it.produto_nome || 'Produto'}
+                                      </div>
+                                      <div className="text-ink-secondary text-[11px] flex items-center gap-2 mt-0.5">
+                                        <span>{formatarMoeda(it.preco_unitario_centavos)} un.</span>
+                                        <span>• Total: {formatarMoeda(subtotal)}</span>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <span
+                                        className={`px-2 py-0.5 rounded-full font-semibold text-[11px] ${
+                                          isEntregue
+                                            ? 'bg-status-available-bg text-status-available'
+                                            : isReservado
+                                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                            : isAguardando
+                                            ? 'bg-blue-50 text-blue-700'
+                                            : 'bg-gray-100 text-gray-700'
+                                        }`}
+                                      >
+                                        {isEntregue
+                                          ? '✓ Entregue'
+                                          : isReservado
+                                          ? '📦 Pronto p/ Entrega'
+                                          : isAguardando
+                                          ? '⏳ Aguardando Fábrica'
+                                          : it.status_entrega}
+                                      </span>
+
+                                      {isReservado && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleEntregarItem(conta.id, it.id)}
+                                          disabled={entregandoItemId === it.id}
+                                          className="min-h-[48px] px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+                                        >
+                                          {entregandoItemId === it.id ? (
+                                            <span>Entregando...</span>
+                                          ) : (
+                                            <>
+                                              <span>✓</span>
+                                              <span>Entregar</span>
+                                            </>
+                                          )}
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
                           )}
                         </div>

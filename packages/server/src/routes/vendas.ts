@@ -354,7 +354,381 @@ export const vendasRoutes: FastifyPluginAsync = async (fastify) => {
         orderBy: { criado_em: 'desc' }
       });
 
-      return reply.send(contas);
+      const contasComStatus = contas.map((c: any) => ({
+        ...c,
+        status_entrega: calcularStatusEntregaConta(c.itens)
+      }));
+
+      return reply.send(contasComStatus);
+    }
+  );
+
+  // GET /api/contas/:id - Detalhes de uma conta específica
+  fastify.get<{ Params: { id: string } }>(
+    '/api/contas/:id',
+    { preHandler: fastify.requireSession },
+    async (request, reply) => {
+      const { id } = request.params;
+      const session = request.session!;
+
+      const conta = await request.tenantPrisma.conta.findFirst({
+        where: {
+          id: id.trim(),
+          operacao_id: session.operacaoId
+        },
+        include: {
+          cliente: true,
+          itens: {
+            include: {
+              produto: true
+            }
+          }
+        }
+      });
+
+      if (!conta) {
+        return reply.status(404).type('application/problem+json').send(
+          createProblemDetails(404, 'CONTA_NAO_ENCONTRADA', 'Conta Não Encontrada', 'A conta solicitada não existe nesta operação.')
+        );
+      }
+
+      return reply.send({
+        ...conta,
+        status_entrega: calcularStatusEntregaConta(conta.itens)
+      });
+    }
+  );
+
+  // POST /api/contas/:id/itens/:itemId/entregar - Confirmação de entrega física de item individual (FR-027, FR-028, FR-031, AD-3, NFR-001)
+  fastify.post<{ Params: { id: string; itemId: string } }>(
+    '/api/contas/:id/itens/:itemId/entregar',
+    { preHandler: fastify.requireSession },
+    async (request, reply) => {
+      const { id, itemId } = request.params;
+      const session = request.session!;
+
+      try {
+        const resultado = await (request.tenantPrisma as any).$transaction(async (tx: any) => {
+          // Busca o item da conta garantindo isolamento da operação
+          const itemConta = await tx.itemConta.findFirst({
+            where: {
+              id: itemId.trim(),
+              conta_id: id.trim(),
+              operacao_id: session.operacaoId
+            },
+            include: {
+              produto: true,
+              conta: {
+                include: { cliente: true }
+              }
+            }
+          });
+
+          if (!itemConta) {
+            throw new DomainError(
+              createProblemDetails(404, 'ITEM_NAO_ENCONTRADO', 'Item Não Encontrado', 'O item informado não foi encontrado nesta conta.')
+            );
+          }
+
+          if (itemConta.status_entrega === 'ENTREGUE') {
+            throw new DomainError(
+              createProblemDetails(400, 'ITEM_JA_ENTREGUE', 'Item Já Entregue', 'Este produto já teve sua entrega física confirmada anteriormente.')
+            );
+          }
+
+          if (itemConta.status_entrega === 'AGUARDANDO_FABRICA') {
+            throw new DomainError(
+              createProblemDetails(
+                400,
+                'ITEM_NAO_DISPONIVEL_PARA_ENTREGA',
+                'Item Não Disponível para Entrega',
+                'Este item ainda está aguardando a chegada da fábrica e não pode ser entregue fisicamente.'
+              )
+            );
+          }
+
+          if (itemConta.status_entrega !== 'RESERVADO_PRESENTE') {
+            throw badRequestError(`Status de entrega "${itemConta.status_entrega}" não permite confirmação de entrega.`);
+          }
+
+          // Busca e atualiza o estoque físico com baixa estrita apenas na entrega (AD-3)
+          const estoqueDb = await tx.estoqueItem.findFirst({
+            where: {
+              operacao_id: session.operacaoId,
+              produto_id: itemConta.produto_id
+            }
+          });
+
+          if (!estoqueDb) {
+            throw badRequestError('Registro de estoque não encontrado para o produto.');
+          }
+
+          const itemEstoqueDomain = new EstoqueItem({
+            id: estoqueDb.id,
+            operacaoId: session.operacaoId,
+            produtoId: itemConta.produto_id,
+            presentes: estoqueDb.presentes,
+            reservados: estoqueDb.reservados,
+            prontaEntrega: estoqueDb.pronta_entrega
+          });
+
+          // Baixa física no armário: presentes -= qtd, reservados -= qtd, pronta_entrega inalterado
+          itemEstoqueDomain.confirmarEntregaFisica(itemConta.quantidade);
+
+          await tx.estoqueItem.update({
+            where: { id: itemEstoqueDomain.id },
+            data: {
+              presentes: itemEstoqueDomain.presentes,
+              reservados: itemEstoqueDomain.reservados,
+              pronta_entrega: itemEstoqueDomain.prontaEntrega
+            }
+          });
+
+          // Registra movimentação de saída por venda
+          await tx.movimentacaoEstoque.create({
+            data: {
+              id: gerarUuidV7(),
+              operacao_id: session.operacaoId,
+              produto_id: itemConta.produto_id,
+              estoque_item_id: itemEstoqueDomain.id,
+              tipo: 'SAIDA_VENDA',
+              quantidade: itemConta.quantidade,
+              presentes_anterior: estoqueDb.presentes,
+              presentes_posterior: itemEstoqueDomain.presentes,
+              reservados_anterior: estoqueDb.reservados,
+              reservados_posterior: itemEstoqueDomain.reservados,
+              pronta_entrega_anterior: estoqueDb.pronta_entrega,
+              pronta_entrega_posterior: itemEstoqueDomain.prontaEntrega,
+              operador_id: session.operadorId,
+              operador_nome: session.operadorNome,
+              detalhes: `Entrega física confirmada para cliente ${itemConta.conta.cliente.nome}: ${itemConta.quantidade} unidade(s)`
+            }
+          });
+
+          // Atualiza status do item para ENTREGUE
+          const itemAtualizado = await tx.itemConta.update({
+            where: { id: itemConta.id },
+            data: {
+              status_entrega: 'ENTREGUE'
+            }
+          });
+
+          // Registra auditoria da entrega
+          await tx.registroAuditoria.create({
+            data: {
+              id: gerarUuidV7(),
+              operacao_id: session.operacaoId,
+              operador_id: session.operadorId,
+              operador_nome: session.operadorNome,
+              acao: 'CONFIRMACAO_ENTREGA_ITEM',
+              detalhes: JSON.stringify({
+                conta_id: id,
+                item_conta_id: itemId,
+                produto_id: itemConta.produto_id,
+                quantidade: itemConta.quantidade,
+                cliente_id: itemConta.conta.cliente_id
+              })
+            }
+          });
+
+          // Carrega todos os itens da conta para calcular novo status consolidado
+          const todosItens = await tx.itemConta.findMany({
+            where: { conta_id: id, operacao_id: session.operacaoId }
+          });
+
+          const statusConsolidado = calcularStatusEntregaConta(todosItens);
+
+          return {
+            mensagem: 'Entrega física do item confirmada com sucesso.',
+            item: itemAtualizado,
+            status_entrega_conta: statusConsolidado,
+            estoque_atualizado: {
+              presentes: itemEstoqueDomain.presentes,
+              reservados: itemEstoqueDomain.reservados,
+              pronta_entrega: itemEstoqueDomain.prontaEntrega
+            }
+          };
+        });
+
+        return reply.status(200).send(resultado);
+      } catch (err: any) {
+        if (err instanceof DomainError) {
+          return reply.status(err.problem.status).type('application/problem+json').send(err.problem);
+        }
+        if (err.problem) {
+          return reply.status(err.problem.status).type('application/problem+json').send(err.problem);
+        }
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(400, 'BAD_REQUEST', 'Erro ao Confirmar Entrega', err.message || 'Erro inesperado.')
+        );
+      }
+    }
+  );
+
+  // POST /api/contas/:id/entregar-tudo - Entrega de todos os itens disponíveis da conta (FR-027, FR-028, AD-3)
+  fastify.post<{ Params: { id: string } }>(
+    '/api/contas/:id/entregar-tudo',
+    { preHandler: fastify.requireSession },
+    async (request, reply) => {
+      const { id } = request.params;
+      const session = request.session!;
+
+      try {
+        const resultado = await (request.tenantPrisma as any).$transaction(async (tx: any) => {
+          const conta = await tx.conta.findFirst({
+            where: { id: id.trim(), operacao_id: session.operacaoId },
+            include: {
+              cliente: true,
+              itens: { include: { produto: true } }
+            }
+          });
+
+          if (!conta) {
+            throw new DomainError(
+              createProblemDetails(404, 'CONTA_NAO_ENCONTRADA', 'Conta Não Encontrada', 'A conta informada não foi encontrada nesta operação.')
+            );
+          }
+
+          const itensReservados = conta.itens.filter((it: any) => it.status_entrega === 'RESERVADO_PRESENTE');
+
+          if (itensReservados.length === 0) {
+            const todosEntregues = conta.itens.every((it: any) => it.status_entrega === 'ENTREGUE');
+            if (todosEntregues) {
+              throw new DomainError(
+                createProblemDetails(400, 'NENHUM_ITEM_PENDENTE_ENTREGA', 'Itens Já Entregues', 'Todos os itens disponíveis desta conta já foram entregues.')
+              );
+            }
+            throw new DomainError(
+              createProblemDetails(400, 'NENHUM_ITEM_DISPONIVEL', 'Nenhum Item Disponível', 'Não há itens com reserva presente disponíveis para entrega nesta conta.')
+            );
+          }
+
+          const itensEntregues = [];
+
+          for (const itemConta of itensReservados) {
+            const estoqueDb = await tx.estoqueItem.findFirst({
+              where: {
+                operacao_id: session.operacaoId,
+                produto_id: itemConta.produto_id
+              }
+            });
+
+            if (!estoqueDb) {
+              throw badRequestError(`Estoque não localizado para produto ${itemConta.produto.nome}`);
+            }
+
+            const itemEstoqueDomain = new EstoqueItem({
+              id: estoqueDb.id,
+              operacaoId: session.operacaoId,
+              produtoId: itemConta.produto_id,
+              presentes: estoqueDb.presentes,
+              reservados: estoqueDb.reservados,
+              prontaEntrega: estoqueDb.pronta_entrega
+            });
+
+            itemEstoqueDomain.confirmarEntregaFisica(itemConta.quantidade);
+
+            await tx.estoqueItem.update({
+              where: { id: itemEstoqueDomain.id },
+              data: {
+                presentes: itemEstoqueDomain.presentes,
+                reservados: itemEstoqueDomain.reservados,
+                pronta_entrega: itemEstoqueDomain.prontaEntrega
+              }
+            });
+
+            await tx.movimentacaoEstoque.create({
+              data: {
+                id: gerarUuidV7(),
+                operacao_id: session.operacaoId,
+                produto_id: itemConta.produto_id,
+                estoque_item_id: itemEstoqueDomain.id,
+                tipo: 'SAIDA_VENDA',
+                quantidade: itemConta.quantidade,
+                presentes_anterior: estoqueDb.presentes,
+                presentes_posterior: itemEstoqueDomain.presentes,
+                reservados_anterior: estoqueDb.reservados,
+                reservados_posterior: itemEstoqueDomain.reservados,
+                pronta_entrega_anterior: estoqueDb.pronta_entrega,
+                pronta_entrega_posterior: itemEstoqueDomain.prontaEntrega,
+                operador_id: session.operadorId,
+                operador_nome: session.operadorNome,
+                detalhes: `Entrega física em lote para cliente ${conta.cliente.nome}: ${itemConta.quantidade} unidade(s) de ${itemConta.produto.nome}`
+              }
+            });
+
+            const itAtualizado = await tx.itemConta.update({
+              where: { id: itemConta.id },
+              data: { status_entrega: 'ENTREGUE' }
+            });
+
+            itensEntregues.push(itAtualizado);
+          }
+
+          await tx.registroAuditoria.create({
+            data: {
+              id: gerarUuidV7(),
+              operacao_id: session.operacaoId,
+              operador_id: session.operadorId,
+              operador_nome: session.operadorNome,
+              acao: 'CONFIRMACAO_ENTREGA_TOTAL',
+              detalhes: JSON.stringify({
+                conta_id: id,
+                cliente_id: conta.cliente_id,
+                quantidade_itens_entregues: itensEntregues.length
+              })
+            }
+          });
+
+          const todosItensAtualizados = await tx.itemConta.findMany({
+            where: { conta_id: id, operacao_id: session.operacaoId }
+          });
+
+          const statusConsolidado = calcularStatusEntregaConta(todosItensAtualizados);
+
+          return {
+            mensagem: `${itensEntregues.length} item(ns) entregue(s) com sucesso.`,
+            itens_entregues: itensEntregues,
+            status_entrega_conta: statusConsolidado
+          };
+        });
+
+        return reply.status(200).send(resultado);
+      } catch (err: any) {
+        if (err instanceof DomainError) {
+          return reply.status(err.problem.status).type('application/problem+json').send(err.problem);
+        }
+        if (err.problem) {
+          return reply.status(err.problem.status).type('application/problem+json').send(err.problem);
+        }
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(400, 'BAD_REQUEST', 'Erro ao Confirmar Entregas', err.message || 'Erro inesperado.')
+        );
+      }
     }
   );
 };
+
+export function calcularStatusEntregaConta(itens: Array<{ status_entrega: string }>): string {
+  const itensAtivos = itens.filter((i) => i.status_entrega !== 'CANCELADO');
+  if (itensAtivos.length === 0) return 'SEM_ITENS';
+
+  const todosEntregues = itensAtivos.every((i) => i.status_entrega === 'ENTREGUE');
+  if (todosEntregues) return 'ENTREGUE';
+
+  const algumEntregue = itensAtivos.some((i) => i.status_entrega === 'ENTREGUE');
+  const algumPendente = itensAtivos.some(
+    (i) => i.status_entrega === 'AGUARDANDO_FABRICA' || i.status_entrega === 'RESERVADO_PRESENTE'
+  );
+
+  if (algumEntregue && algumPendente) return 'PARCIALMENTE_ENTREGUE';
+
+  const todosAguardandoFabrica = itensAtivos.every((i) => i.status_entrega === 'AGUARDANDO_FABRICA');
+  if (todosAguardandoFabrica) return 'AGUARDANDO_FABRICA';
+
+  const algumReservado = itensAtivos.some((i) => i.status_entrega === 'RESERVADO_PRESENTE');
+  if (algumReservado) return 'DISPONIVEL_RETIRADA';
+
+  return 'PENDENTE';
+}
+

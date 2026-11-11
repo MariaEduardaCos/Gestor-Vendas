@@ -17,6 +17,7 @@ export interface ContaDTO {
   total_sem_aguardados?: number;
   saldo_cobravel_hoje?: number;
   status: string;
+  status_entrega?: string;
   criado_em: string;
   itens?: ItemContaDTO[];
 }
