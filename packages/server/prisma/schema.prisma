@@ -20,6 +20,8 @@ model Operacao {
   encomendas       Encomenda[]
   marcas           Marca[]
   produtos         Produto[]
+  itens_estoque    EstoqueItem[]
+  movimentacoes_estoque MovimentacaoEstoque[]
 
   @@map("operacoes")
 }
@@ -151,13 +153,65 @@ model Produto {
   criado_em            DateTime @default(now())
   atualizado_em        DateTime @updatedAt
 
-  operacao Operacao @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
-  marca    Marca?   @relation(fields: [marca_id], references: [id], onDelete: SetNull)
+  operacao              Operacao              @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+  marca                 Marca?                @relation(fields: [marca_id], references: [id], onDelete: SetNull)
+  itens_estoque         EstoqueItem[]
+  movimentacoes_estoque MovimentacaoEstoque[]
 
   @@index([operacao_id])
   @@index([operacao_id, codigo_barras])
   @@index([operacao_id, nome])
   @@index([marca_id])
   @@map("produtos")
+}
+
+model EstoqueItem {
+  id             String   @id
+  operacao_id    String
+  produto_id     String
+  presentes      Int      @default(0)
+  reservados     Int      @default(0)
+  pronta_entrega Int      @default(0)
+  criado_em      DateTime @default(now())
+  atualizado_em  DateTime @updatedAt
+
+  operacao      Operacao              @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+  produto       Produto               @relation(fields: [produto_id], references: [id], onDelete: Cascade)
+  movimentacoes MovimentacaoEstoque[]
+
+  @@unique([operacao_id, produto_id])
+  @@index([operacao_id])
+  @@index([operacao_id, produto_id])
+  @@index([produto_id])
+  @@map("itens_estoque")
+}
+
+model MovimentacaoEstoque {
+  id                      String   @id
+  operacao_id             String
+  produto_id              String
+  estoque_item_id         String
+  tipo                    String
+  quantidade              Int
+  presentes_anterior      Int
+  presentes_posterior     Int
+  reservados_anterior     Int
+  reservados_posterior    Int
+  pronta_entrega_anterior  Int
+  pronta_entrega_posterior Int
+  compra_id               String?
+  operador_id             String
+  operador_nome           String
+  detalhes                String?
+  criado_em               DateTime @default(now())
+
+  operacao     Operacao    @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+  produto      Produto     @relation(fields: [produto_id], references: [id], onDelete: Cascade)
+  estoque_item EstoqueItem @relation(fields: [estoque_item_id], references: [id], onDelete: Cascade)
+
+  @@index([operacao_id])
+  @@index([operacao_id, produto_id])
+  @@index([estoque_item_id])
+  @@map("movimentacoes_estoque")
 }
 

@@ -13,7 +13,9 @@ import {
   formatarTelefone,
   sanitizarTelefone,
   Marca,
-  Produto
+  Produto,
+  EstoqueItem,
+  MovimentacaoEstoque
 } from '../src/index.js';
 
 describe('Core Domain & Value Objects', () => {
@@ -316,6 +318,133 @@ describe('Core Domain & Value Objects', () => {
     prod.atualizar({ precoVendaCentavos: 20000 });
     expect(prod.custoCentavos).toBe(14000);
     expect(prod.provenienciaCusto).toBe('ESTIMADO_PERCENTUAL');
+  });
+
+  describe('Story 1.4: Conservação de Estoque e Estoque Inicial', () => {
+    it('deve instanciar EstoqueItem válido respeitando Presentes = Reservados + ProntaEntrega (AD-3)', () => {
+      const item = new EstoqueItem({
+        operacaoId: 'op-1',
+        produtoId: 'prod-1',
+        presentes: 5,
+        reservados: 2,
+        prontaEntrega: 3
+      });
+
+      expect(item.presentes).toBe(5);
+      expect(item.reservados).toBe(2);
+      expect(item.prontaEntrega).toBe(3);
+      expect(item.presentes).toBe(item.reservados + item.prontaEntrega);
+    });
+
+    it('deve criar estoque inicial com Presentes = X, ProntaEntrega = X e Reservados = 0', () => {
+      const item = EstoqueItem.criarInicial({
+        operacaoId: 'op-1',
+        produtoId: 'prod-1',
+        quantidade: 5
+      });
+
+      expect(item.presentes).toBe(5);
+      expect(item.prontaEntrega).toBe(5);
+      expect(item.reservados).toBe(0);
+      expect(item.presentes).toBe(item.reservados + item.prontaEntrega);
+    });
+
+    it('deve rejeitar violações da regra de conservação de estoque (AD-3)', () => {
+      // Presentes (5) != Reservados (2) + ProntaEntrega (2) -> soma 4
+      expect(() => new EstoqueItem({
+        operacaoId: 'op-1',
+        produtoId: 'prod-1',
+        presentes: 5,
+        reservados: 2,
+        prontaEntrega: 2
+      })).toThrow(/regra de conservação de estoque foi violada/i);
+
+      // Presentes menor que Reservados
+      expect(() => new EstoqueItem({
+        operacaoId: 'op-1',
+        produtoId: 'prod-1',
+        presentes: 2,
+        reservados: 3,
+        prontaEntrega: -1
+      })).toThrow();
+    });
+
+    it('deve rejeitar quantidades negativas e não inteiras no estoque (NFR-001)', () => {
+      expect(() => EstoqueItem.criarInicial({
+        operacaoId: 'op-1',
+        produtoId: 'prod-1',
+        quantidade: -2
+      })).toThrow(/não negativo/i);
+
+      expect(() => EstoqueItem.criarInicial({
+        operacaoId: 'op-1',
+        produtoId: 'prod-1',
+        quantidade: 1.5
+      })).toThrow(/inteiro/i);
+
+      const item = EstoqueItem.criarInicial({
+        operacaoId: 'op-1',
+        produtoId: 'prod-1',
+        quantidade: 5
+      });
+
+      expect(() => item.lancarEstoqueInicial(-2)).toThrow(/não negativo/i);
+      expect(() => item.lancarEstoqueInicial(2.5)).toThrow(/inteiro/i);
+
+      // Rejeita redefinir estoque inicial com reservas ativas
+      const itemComReserva = new EstoqueItem({
+        operacaoId: 'op-1',
+        produtoId: 'prod-1',
+        presentes: 5,
+        reservados: 2,
+        prontaEntrega: 3
+      });
+      expect(() => itemComReserva.lancarEstoqueInicial(10)).toThrow(/reservas ativas/i);
+    });
+
+    it('deve registrar MovimentacaoEstoque do tipo ESTOQUE_INICIAL com compraId nulo (FR-013, NFR-003)', () => {
+      const mov = new MovimentacaoEstoque({
+        operacaoId: 'op-1',
+        produtoId: 'prod-1',
+        estoqueItemId: 'est-1',
+        tipo: 'ESTOQUE_INICIAL',
+        quantidade: 5,
+        presentesAnterior: 0,
+        presentesPosterior: 5,
+        reservadosAnterior: 0,
+        reservadosPosterior: 0,
+        prontaEntregaAnterior: 0,
+        prontaEntregaPosterior: 5,
+        compraId: null,
+        operadorId: 'user-1',
+        operadorNome: 'Dona Sônia',
+        detalhes: 'Contagem inicial da estante física'
+      });
+
+      expect(mov.tipo).toBe('ESTOQUE_INICIAL');
+      expect(mov.quantidade).toBe(5);
+      expect(mov.compraId).toBeNull();
+      expect(mov.operadorNome).toBe('Dona Sônia');
+      expect(mov.criadoEm).toBeDefined();
+
+      // Não pode permitir compraId em ESTOQUE_INICIAL
+      expect(() => new MovimentacaoEstoque({
+        operacaoId: 'op-1',
+        produtoId: 'prod-1',
+        estoqueItemId: 'est-1',
+        tipo: 'ESTOQUE_INICIAL',
+        quantidade: 5,
+        presentesAnterior: 0,
+        presentesPosterior: 5,
+        reservadosAnterior: 0,
+        reservadosPosterior: 0,
+        prontaEntregaAnterior: 0,
+        prontaEntregaPosterior: 5,
+        compraId: 'compra-ficticia-123',
+        operadorId: 'user-1',
+        operadorNome: 'Dona Sônia'
+      })).toThrow(/vínculo com compra/i);
+    });
   });
 });
 

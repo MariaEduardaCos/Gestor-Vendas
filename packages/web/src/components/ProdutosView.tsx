@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import type { ProdutoDTO } from '../types/produto';
+import type { EstoqueDTO } from '../types/estoque';
 import { ProdutoModal } from './ProdutoModal';
 import { MarcasModal } from './MarcasModal';
+import { EstoqueInicialModal } from './EstoqueInicialModal';
 
 interface ProdutosViewProps {
   sessionToken?: string;
@@ -10,6 +12,7 @@ interface ProdutosViewProps {
 
 export function ProdutosView({ sessionToken, refreshTrigger }: ProdutosViewProps) {
   const [produtos, setProdutos] = useState<ProdutoDTO[]>([]);
+  const [estoqueMap, setEstoqueMap] = useState<Record<string, EstoqueDTO>>({});
   const [busca, setBusca] = useState('');
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -18,6 +21,8 @@ export function ProdutosView({ sessionToken, refreshTrigger }: ProdutosViewProps
   const [produtoModalAberto, setProdutoModalAberto] = useState(false);
   const [produtoParaEditar, setProdutoParaEditar] = useState<ProdutoDTO | null>(null);
   const [marcasModalAberto, setMarcasModalAberto] = useState(false);
+  const [estoqueModalAberto, setEstoqueModalAberto] = useState(false);
+  const [produtoParaEstoque, setProdutoParaEstoque] = useState<ProdutoDTO | null>(null);
 
   // Carrega produtos do catálogo
   const carregarProdutos = async (termo = '') => {
@@ -46,8 +51,34 @@ export function ProdutosView({ sessionToken, refreshTrigger }: ProdutosViewProps
     }
   };
 
+  // Carrega mapa de estoque separadamente (no carregamento inicial ou após alteração de estoque)
+  const carregarEstoque = async () => {
+    try {
+      const headers: Record<string, string> = {};
+      if (sessionToken) {
+        headers['Authorization'] = `Bearer ${sessionToken}`;
+      }
+
+      const res = await fetch('/api/estoque', { headers });
+      if (res.ok) {
+        const dataEstoque: EstoqueDTO[] = await res.json();
+        const map: Record<string, EstoqueDTO> = {};
+        for (const item of dataEstoque) {
+          map[item.produto_id] = item;
+        }
+        setEstoqueMap(map);
+      }
+    } catch {
+      // Falha silenciosa no mapa de estoque
+    }
+  };
+
   useEffect(() => {
     carregarProdutos(busca);
+  }, [sessionToken, refreshTrigger]);
+
+  useEffect(() => {
+    carregarEstoque();
   }, [sessionToken, refreshTrigger]);
 
   const handleBuscar = (e: React.FormEvent) => {
@@ -232,6 +263,50 @@ export function ProdutosView({ sessionToken, refreshTrigger }: ProdutosViewProps
                   </div>
                 )}
 
+                {/* Miolo do Card: Pílulas de Quantidade de Estoque e Gatilho (AD-3, UX-DR3) */}
+                {(() => {
+                  const est = estoqueMap[p.id];
+                  return (
+                    <div className="py-2 px-3 bg-surface-base/80 border border-border-hairline rounded-md flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 my-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-meta font-semibold text-ink-secondary mr-1">Estoque:</span>
+                        <span
+                          className="inline-flex items-center gap-1 bg-status-available-bg text-status-available border border-status-available/20 text-xs font-bold px-2.5 py-0.5 rounded-full"
+                          title="Unidades físicas presentes na estante"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-status-available" />
+                          {est?.presentes ?? 0} Presentes
+                        </span>
+                        <span
+                          className="inline-flex items-center gap-1 bg-status-available-bg/60 text-status-available border border-status-available/20 text-xs font-semibold px-2.5 py-0.5 rounded-full"
+                          title="Unidades prontas para entrega imediata"
+                        >
+                          {est?.pronta_entrega ?? 0} Pronta-Entrega
+                        </span>
+                        <span
+                          className="inline-flex items-center gap-1 bg-status-reserved-bg text-status-reserved border border-status-reserved/20 text-xs font-semibold px-2.5 py-0.5 rounded-full"
+                          title="Unidades reservadas para encomendas"
+                        >
+                          {est?.reservados ?? 0} Reservados
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProdutoParaEstoque(p);
+                          setEstoqueModalAberto(true);
+                        }}
+                        className="w-full sm:w-auto min-h-touch-target px-3.5 py-1.5 bg-surface-raised hover:bg-surface-sunken border border-border-strong text-ink-primary font-semibold text-meta rounded-md flex items-center justify-center gap-1.5 shadow-2xs transition-colors"
+                        title="Lançar ou atualizar contagem de estoque inicial"
+                      >
+                        <span>📦</span>
+                        <span>{est ? 'Contagem Física' : 'Lançar Estoque Inicial'}</span>
+                      </button>
+                    </div>
+                  );
+                })()}
+
                 {/* Linha de Preço e Custo */}
                 <div className="pt-2 border-t border-border-hairline flex flex-wrap items-center justify-between gap-2">
                   <div>
@@ -295,6 +370,22 @@ export function ProdutosView({ sessionToken, refreshTrigger }: ProdutosViewProps
         onMarcasAtualizadas={() => {
           carregarProdutos(busca);
         }}
+      />
+
+      {/* Modal de Estoque Inicial */}
+      <EstoqueInicialModal
+        isOpen={estoqueModalAberto}
+        produto={produtoParaEstoque}
+        estoqueAtual={produtoParaEstoque ? estoqueMap[produtoParaEstoque.id] : null}
+        onClose={() => {
+          setEstoqueModalAberto(false);
+          setProdutoParaEstoque(null);
+        }}
+        onEstoqueAtualizado={() => {
+          carregarEstoque();
+          carregarProdutos(busca);
+        }}
+        sessionToken={sessionToken}
       />
     </div>
   );

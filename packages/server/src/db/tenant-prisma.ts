@@ -92,6 +92,21 @@ export function createTenantPrisma(basePrisma: PrismaClient, operacaoId: string)
           if (model !== 'Operacao') {
             args.data = { ...(args.data as any), operacao_id: normalizedOperacaoId };
           }
+          if (model === 'EstoqueItem') {
+            const data = args.data as any;
+            const p = data.presentes ?? 0;
+            const r = data.reservados ?? 0;
+            const pe = data.pronta_entrega ?? 0;
+            if (!Number.isInteger(p) || p < 0 || !Number.isInteger(r) || r < 0 || !Number.isInteger(pe) || pe < 0 || p !== r + pe || p < r) {
+              throw new Error('A regra de conservação de estoque foi violada: Presentes deve ser igual a Reservados + ProntaEntrega (AD-3).');
+            }
+          }
+          if (model === 'MovimentacaoEstoque') {
+            const data = args.data as any;
+            if (data.tipo === 'ESTOQUE_INICIAL' && data.compra_id !== null && data.compra_id !== undefined) {
+              throw new Error('Lançamento de estoque inicial não pode possuir vínculo com compra da marca (FR-013).');
+            }
+          }
           return query(args);
         },
         async createMany({ model, args, query }) {
@@ -125,6 +140,16 @@ export function createTenantPrisma(basePrisma: PrismaClient, operacaoId: string)
           });
           if (!existing) {
             throw new Error(`Registro não encontrado ou não pertence à operação '${normalizedOperacaoId}'.`);
+          }
+
+          if (model === 'EstoqueItem') {
+            const data = args.data as any;
+            const p = data.presentes !== undefined ? data.presentes : existing.presentes;
+            const r = data.reservados !== undefined ? data.reservados : existing.reservados;
+            const pe = data.pronta_entrega !== undefined ? data.pronta_entrega : existing.pronta_entrega;
+            if (!Number.isInteger(p) || p < 0 || !Number.isInteger(r) || r < 0 || !Number.isInteger(pe) || pe < 0 || p !== r + pe || p < r) {
+              throw new Error('A regra de conservação de estoque foi violada: Presentes deve ser igual a Reservados + ProntaEntrega (AD-3).');
+            }
           }
 
           return query(args);
@@ -187,6 +212,27 @@ export function createTenantPrisma(basePrisma: PrismaClient, operacaoId: string)
           });
           if (existingOther) {
             throw new Error(`Registro não pertence à operação '${normalizedOperacaoId}'.`);
+          }
+
+          if (model === 'EstoqueItem') {
+            const createData = args.create as any;
+            const cp = createData.presentes ?? 0;
+            const cr = createData.reservados ?? 0;
+            const cpe = createData.pronta_entrega ?? 0;
+            if (!Number.isInteger(cp) || cp < 0 || !Number.isInteger(cr) || cr < 0 || !Number.isInteger(cpe) || cpe < 0 || cp !== cr + cpe || cp < cr) {
+              throw new Error('A regra de conservação de estoque foi violada: Presentes deve ser igual a Reservados + ProntaEntrega (AD-3).');
+            }
+
+            const existingSelf = await (basePrisma as any)[model].findFirst({
+              where: { ...args.where, operacao_id: normalizedOperacaoId }
+            });
+            const updateData = args.update as any;
+            const up = updateData.presentes !== undefined ? updateData.presentes : existingSelf?.presentes ?? cp;
+            const ur = updateData.reservados !== undefined ? updateData.reservados : existingSelf?.reservados ?? cr;
+            const upe = updateData.pronta_entrega !== undefined ? updateData.pronta_entrega : existingSelf?.pronta_entrega ?? cpe;
+            if (!Number.isInteger(up) || up < 0 || !Number.isInteger(ur) || ur < 0 || !Number.isInteger(upe) || upe < 0 || up !== ur + upe || up < ur) {
+              throw new Error('A regra de conservação de estoque foi violada: Presentes deve ser igual a Reservados + ProntaEntrega (AD-3).');
+            }
           }
 
           return query(args);
