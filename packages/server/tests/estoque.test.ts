@@ -419,5 +419,102 @@ describe('Story 1.4: Lançamento de Estoque Inicial por Produto', () => {
     expect(listaB[0].presentes).toBe(3);
     expect(listaB[0].pronta_entrega).toBe(3);
     expect(listaB[0].reservados).toBe(0);
+    expect(listaB[0].aguardando_fabrica).toBe(0);
+  });
+
+  describe('Story 4.1: Consulta do Estoque com Pílulas Multistatus Coloridas (FR-025, UX-DR3, NFR-004, NFR-005)', () => {
+    it('deve retornar contadores completos incluindo aguardando_fabrica com encomendas e pedidos a marca pendentes', async () => {
+      // 1. Cadastra cliente na Operação A
+      const resCli = await app.inject({
+        method: 'POST',
+        url: '/api/clientes',
+        headers: { Authorization: `Bearer ${tokenSoniaA}` },
+        payload: {
+          nome: 'Carla Dias Estoque',
+          telefone: '(11) 97777-3333'
+        }
+      });
+      const clienteId = resCli.json().id;
+
+      // 2. Encomenda de 2 unidades do produto da Sonia (status inicial: AGUARDANDO_FABRICA)
+      await app.inject({
+        method: 'POST',
+        url: '/api/encomendas',
+        headers: { Authorization: `Bearer ${tokenSoniaA}` },
+        payload: {
+          cliente_id: clienteId,
+          itens: [
+            {
+              produto_id: produtoSoniaId,
+              quantidade: 2
+            }
+          ]
+        }
+      });
+
+      // 3. Cadastra marca e compra com 3 unidades em pronta-entrega pendentes de recebimento
+      const resMarca = await app.inject({
+        method: 'POST',
+        url: '/api/marcas',
+        headers: { Authorization: `Bearer ${tokenSoniaA}` },
+        payload: {
+          nome: 'Avon Cosméticos',
+          percentual_comissao: 30
+        }
+      });
+      const marcaId = resMarca.json().id;
+
+      // Vincula o produto à marca para ser compatível com a compra da marca (FR-017)
+      await prisma.produto.update({
+        where: { id: produtoSoniaId },
+        data: { marca_id: marcaId }
+      });
+
+      const resCompra = await app.inject({
+        method: 'POST',
+        url: '/api/compras-marca',
+        headers: { Authorization: `Bearer ${tokenSoniaA}` },
+        payload: {
+          marca_id: marcaId,
+          numero_pedido: 'PED-ESTOQUE-401',
+          itens: [
+            {
+              produto_id: produtoSoniaId,
+              destinacao: 'PRONTA_ENTREGA',
+              quantidade: 3
+            }
+          ]
+        }
+      });
+
+      // 4. Consulta individual de estoque (GET /api/estoque/:produtoId)
+      const resIndividual = await app.inject({
+        method: 'GET',
+        url: `/api/estoque/${produtoSoniaId}`,
+        headers: { Authorization: `Bearer ${tokenSoniaA}` }
+      });
+      expect(resIndividual.statusCode).toBe(200);
+      const dataInd = resIndividual.json();
+      expect(dataInd.presentes).toBe(8);
+      expect(dataInd.pronta_entrega).toBe(8);
+      expect(dataInd.reservados).toBe(0);
+      // 2 da encomenda + 3 do pedido de pronta-entrega = 5 aguardando fábrica!
+      expect(dataInd.aguardando_fabrica).toBe(5);
+      expect(dataInd.presentes).toBe(dataInd.reservados + dataInd.pronta_entrega);
+
+      // 5. Consulta listagem geral (GET /api/estoque)
+      const resGeral = await app.inject({
+        method: 'GET',
+        url: '/api/estoque',
+        headers: { Authorization: `Bearer ${tokenSoniaA}` }
+      });
+      expect(resGeral.statusCode).toBe(200);
+      const itemEstoque = resGeral.json().find((i: any) => i.produto_id === produtoSoniaId);
+      expect(itemEstoque).toBeDefined();
+      expect(itemEstoque.presentes).toBe(8);
+      expect(itemEstoque.pronta_entrega).toBe(8);
+      expect(itemEstoque.reservados).toBe(0);
+      expect(itemEstoque.aguardando_fabrica).toBe(5);
+    });
   });
 });

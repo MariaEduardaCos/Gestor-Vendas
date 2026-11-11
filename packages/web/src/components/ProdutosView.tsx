@@ -272,22 +272,31 @@ export function ProdutosView({ sessionToken, refreshTrigger }: ProdutosViewProps
                         <span className="text-meta font-semibold text-ink-secondary mr-1">Estoque:</span>
                         <span
                           className="inline-flex items-center gap-1 bg-status-available-bg text-status-available border border-status-available/20 text-xs font-bold px-2.5 py-0.5 rounded-full"
-                          title="Unidades físicas presentes na estante"
+                          title="Unidades físicas presentes na estante (Presentes = Reservados + ProntaEntrega)"
                         >
                           <span className="w-1.5 h-1.5 rounded-full bg-status-available" />
                           {est?.presentes ?? 0} Presentes
                         </span>
                         <span
-                          className="inline-flex items-center gap-1 bg-status-available-bg/60 text-status-available border border-status-available/20 text-xs font-semibold px-2.5 py-0.5 rounded-full"
-                          title="Unidades prontas para entrega imediata"
+                          className="inline-flex items-center gap-1 bg-status-reserved-bg text-status-reserved border border-status-reserved/30 text-xs font-semibold px-2.5 py-0.5 rounded-full"
+                          title="Unidades reservadas para encomendas de clientes"
                         >
+                          <span className="w-1.5 h-1.5 rounded-full bg-status-reserved" />
+                          {est?.reservados ?? 0} Reservados
+                        </span>
+                        <span
+                          className="inline-flex items-center gap-1 bg-status-available-bg/60 text-status-available border border-status-available/20 text-xs font-semibold px-2.5 py-0.5 rounded-full"
+                          title="Unidades prontas para entrega ou venda imediata"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-status-available" />
                           {est?.pronta_entrega ?? 0} Pronta-Entrega
                         </span>
                         <span
-                          className="inline-flex items-center gap-1 bg-status-reserved-bg text-status-reserved border border-status-reserved/20 text-xs font-semibold px-2.5 py-0.5 rounded-full"
-                          title="Unidades reservadas para encomendas"
+                          className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 text-xs font-semibold px-2.5 py-0.5 rounded-full"
+                          title="Unidades pedidas à marca ou encomendadas aguardando entrega da fábrica"
                         >
-                          {est?.reservados ?? 0} Reservados
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                          {est?.aguardando_fabrica ?? 0} Aguardando Fábrica
                         </span>
                       </div>
 

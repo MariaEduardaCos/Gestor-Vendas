@@ -26,6 +26,7 @@ export interface EstoqueDTO {
   presentes: number;
   reservados: number;
   pronta_entrega: number;
+  aguardando_fabrica?: number;
   criado_em?: string | null;
   atualizado_em?: string | null;
   movimentacoes?: MovimentacaoEstoqueDTO[];

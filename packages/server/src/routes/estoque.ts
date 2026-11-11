@@ -280,6 +280,31 @@ export const estoqueRoutes: FastifyPluginAsync = async (fastify) => {
         }
       });
 
+      // Cálculo de frascos aguardados da fábrica (FR-025, UX-DR3)
+      const itensContaAguardando = await request.tenantPrisma.itemConta.findMany({
+        where: {
+          produto_id: produto.id,
+          status_entrega: 'AGUARDANDO_FABRICA'
+        }
+      });
+      const aguardandoClientes = itensContaAguardando.reduce((acc, it) => acc + it.quantidade, 0);
+
+      const itensCompraProntaEntrega = await request.tenantPrisma.itemCompraMarca.findMany({
+        where: {
+          produto_id: produto.id,
+          destinacao: 'PRONTA_ENTREGA',
+          compra: {
+            status: { in: ['PEDIDO_REGISTRADO', 'CONFERENCIA_EM_ANDAMENTO'] }
+          }
+        }
+      });
+      const aguardandoProntaEntrega = itensCompraProntaEntrega.reduce(
+        (acc, it) => acc + Math.max(0, it.quantidade - it.quantidade_recebida - (it.quantidade_cancelada_falta || 0)),
+        0
+      );
+
+      const aguardandoFabrica = aguardandoClientes + aguardandoProntaEntrega;
+
       if (!estoque) {
         return reply.status(200).send({
           id: null,
@@ -288,6 +313,7 @@ export const estoqueRoutes: FastifyPluginAsync = async (fastify) => {
           presentes: 0,
           reservados: 0,
           pronta_entrega: 0,
+          aguardando_fabrica: aguardandoFabrica,
           criado_em: null,
           atualizado_em: null,
           movimentacoes: []
@@ -301,6 +327,7 @@ export const estoqueRoutes: FastifyPluginAsync = async (fastify) => {
         presentes: estoque.presentes,
         reservados: estoque.reservados,
         pronta_entrega: estoque.pronta_entrega,
+        aguardando_fabrica: aguardandoFabrica,
         criado_em: estoque.criado_em.toISOString(),
         atualizado_em: estoque.atualizado_em.toISOString(),
         movimentacoes: estoque.movimentacoes.map((m) => ({
@@ -389,6 +416,30 @@ export const estoqueRoutes: FastifyPluginAsync = async (fastify) => {
         ]
       });
 
+      // Agregações de aguardando fábrica (FR-025, UX-DR3)
+      const itensContaAguardando = await request.tenantPrisma.itemConta.findMany({
+        where: {
+          status_entrega: 'AGUARDANDO_FABRICA'
+        }
+      });
+      const aguardandoMap: Record<string, number> = {};
+      for (const it of itensContaAguardando) {
+        aguardandoMap[it.produto_id] = (aguardandoMap[it.produto_id] || 0) + it.quantidade;
+      }
+
+      const itensCompraProntaEntrega = await request.tenantPrisma.itemCompraMarca.findMany({
+        where: {
+          destinacao: 'PRONTA_ENTREGA',
+          compra: {
+            status: { in: ['PEDIDO_REGISTRADO', 'CONFERENCIA_EM_ANDAMENTO'] }
+          }
+        }
+      });
+      for (const it of itensCompraProntaEntrega) {
+        const pendente = Math.max(0, it.quantidade - it.quantidade_recebida - (it.quantidade_cancelada_falta || 0));
+        aguardandoMap[it.produto_id] = (aguardandoMap[it.produto_id] || 0) + pendente;
+      }
+
       return reply.status(200).send(
         itens.map((item) => ({
           id: item.id,
@@ -401,6 +452,7 @@ export const estoqueRoutes: FastifyPluginAsync = async (fastify) => {
           presentes: item.presentes,
           reservados: item.reservados,
           pronta_entrega: item.pronta_entrega,
+          aguardando_fabrica: aguardandoMap[item.produto_id] || 0,
           criado_em: item.criado_em.toISOString(),
           atualizado_em: item.atualizado_em.toISOString()
         }))
