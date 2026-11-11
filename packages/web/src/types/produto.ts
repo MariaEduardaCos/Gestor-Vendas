@@ -22,6 +22,11 @@ export interface ProdutoDTO {
   custo_centavos: number | null;
   custo_formatado: string;
   proveniencia_custo: ProvenienciaCusto;
+  estoque?: {
+    presentes: number;
+    reservados: number;
+    pronta_entrega: number;
+  };
   criado_em: string;
   atualizado_em: string;
 }

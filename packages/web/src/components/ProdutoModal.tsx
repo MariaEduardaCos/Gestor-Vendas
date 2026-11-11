@@ -4,6 +4,7 @@ import type { ProdutoDTO, MarcaDTO } from '../types/produto';
 interface ProdutoModalProps {
   isOpen: boolean;
   produtoParaEditar?: ProdutoDTO | null;
+  codigoPrePreenchido?: string;
   onClose: () => void;
   onProdutoSalvo: (produto: ProdutoDTO) => void;
   sessionToken?: string;
@@ -13,6 +14,7 @@ interface ProdutoModalProps {
 export function ProdutoModal({
   isOpen,
   produtoParaEditar,
+  codigoPrePreenchido,
   onClose,
   onProdutoSalvo,
   sessionToken,
@@ -70,13 +72,13 @@ export function ProdutoModal({
         setMarcaId('');
         setNome('');
         setVariante('');
-        setCodigoBarras('');
+        setCodigoBarras(codigoPrePreenchido || '');
         setPrecoVendaReais('');
         setInformarCustoManual(false);
         setCustoManualReais('');
       }
     }
-  }, [isOpen, produtoParaEditar]);
+  }, [isOpen, produtoParaEditar, codigoPrePreenchido]);
 
   if (!isOpen) return null;
 

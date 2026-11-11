@@ -3,12 +3,13 @@ import { ClientesView } from './components/ClientesView';
 import { ClienteDrawer } from './components/ClienteDrawer';
 import { ClienteFichaModal } from './components/ClienteFichaModal';
 import { ProdutosView } from './components/ProdutosView';
+import { VisorView } from './components/VisorView';
 import type { ClienteDTO } from './types/cliente';
 
 export function App() {
   const [operadorNome] = useState('Dona Sônia');
   const [operacaoNome] = useState('Consultoria Beleza Viva');
-  const [abaAtiva, setAbaAtiva] = useState<'inicio' | 'clientes' | 'produtos'>('inicio');
+  const [abaAtiva, setAbaAtiva] = useState<'inicio' | 'leitor' | 'produtos' | 'clientes'>('inicio');
 
   // Sessão Operacional para autenticação nas requisições do navegador
   const [sessionToken, setSessionToken] = useState<string | null>(() => {
@@ -161,9 +162,35 @@ export function App() {
               </button>
             </div>
 
+            {/* Acesso Rápido ao Visor de Leitura Híbrido (S5, UX-DR2) */}
+            <div className="bg-surface-raised border border-border-hairline rounded-lg p-5 shadow-sm flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-title-md font-bold text-ink-primary">
+                  Leitor / Visor de Leitura
+                </h3>
+                <span className="text-meta font-semibold text-brand-primary">Story 1.5</span>
+              </div>
+              <p className="text-body-md text-ink-secondary">
+                Abra a câmera contínua sem cliques intermediários para conferir estoque de produtos e bipar sem repetições acidentais (debounce 1,5s).
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setAbaAtiva('leitor')}
+                className="min-h-touch-target bg-brand-primary hover:bg-brand-hover text-ink-inverse font-bold text-label-strong rounded-md flex items-center justify-center gap-2 shadow-sm transition-colors"
+              >
+                <span>📷</span> Abrir Visor de Leitura (S5)
+              </button>
+            </div>
+
             {/* Indicadores de Conformidade */}
             <div className="bg-surface-raised border border-border-hairline rounded-lg p-5 shadow-sm flex flex-col gap-3">
               <h3 className="text-title-md text-ink-primary font-bold">Indicadores de Conformidade</h3>
+
+              <div className="flex items-center justify-between p-3 bg-surface-sunken rounded-md">
+                <span className="text-body-md text-ink-primary">Visor Híbrido Zero Cliques</span>
+                <span className="text-meta font-semibold text-status-available">Ativo (UX-DR2, FR-009)</span>
+              </div>
 
               <div className="flex items-center justify-between p-3 bg-surface-sunken rounded-md">
                 <span className="text-body-md text-ink-primary">Cadastro com Gaveta Rápida</span>
@@ -186,6 +213,9 @@ export function App() {
               </div>
             </div>
           </div>
+        ) : abaAtiva === 'leitor' ? (
+          /* Aba de Leitor / Visor Contínuo (S5) */
+          <VisorView sessionToken={sessionToken || undefined} />
         ) : abaAtiva === 'produtos' ? (
           /* Aba de Catálogo de Produtos e Marcas (S4) */
           <ProdutosView sessionToken={sessionToken || undefined} />
@@ -207,7 +237,7 @@ export function App() {
 
       {/* Barra de Navegação Inferior (Mobile Friendly com 48px touch-target) */}
       <footer className="bg-surface-raised border-t border-border-hairline p-2 sticky bottom-0 z-10 shadow-lg">
-        <nav className="max-w-md mx-auto grid grid-cols-3 gap-2">
+        <nav className="max-w-md mx-auto grid grid-cols-4 gap-1">
           <button
             type="button"
             onClick={() => setAbaAtiva('inicio')}
@@ -219,6 +249,19 @@ export function App() {
           >
             <span className="text-title-md">🏠</span>
             <span className="text-meta">Início</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAbaAtiva('leitor')}
+            className={`min-h-touch-target flex flex-col items-center justify-center rounded-lg font-semibold text-label-strong transition-colors ${
+              abaAtiva === 'leitor'
+                ? 'bg-brand-subtle text-brand-primary'
+                : 'text-ink-secondary hover:bg-surface-sunken'
+            }`}
+          >
+            <span className="text-title-md">📷</span>
+            <span className="text-meta">Leitor</span>
           </button>
 
           <button

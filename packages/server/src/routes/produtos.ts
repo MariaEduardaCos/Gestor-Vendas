@@ -172,7 +172,8 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
       const produtos = await request.tenantPrisma.produto.findMany({
         where: whereClause,
         include: {
-          marca: true
+          marca: true,
+          itens_estoque: true
         },
         orderBy: [
           { nome: 'asc' },
@@ -187,6 +188,13 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
             ? Centavos.deInteiro(p.custo_centavos).paraFormatado()
             : 'Desconhecido';
 
+          const estoqueItem = p.itens_estoque?.[0];
+          const estoque = {
+            presentes: estoqueItem ? estoqueItem.presentes : 0,
+            reservados: estoqueItem ? estoqueItem.reservados : 0,
+            pronta_entrega: estoqueItem ? estoqueItem.pronta_entrega : 0
+          };
+
           return {
             id: p.id,
             operacao_id: p.operacao_id,
@@ -200,6 +208,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
             custo_centavos: p.custo_centavos,
             custo_formatado: custoFormatado,
             proveniencia_custo: p.proveniencia_custo,
+            estoque,
             criado_em: p.criado_em.toISOString(),
             atualizado_em: p.atualizado_em.toISOString()
           };
@@ -221,7 +230,8 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
           codigo_barras: codigoNormalizado
         },
         include: {
-          marca: true
+          marca: true,
+          itens_estoque: true
         }
       });
 
@@ -241,6 +251,13 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
         ? Centavos.deInteiro(produto.custo_centavos).paraFormatado()
         : 'Desconhecido';
 
+      const estoqueItem = produto.itens_estoque?.[0];
+      const estoque = {
+        presentes: estoqueItem ? estoqueItem.presentes : 0,
+        reservados: estoqueItem ? estoqueItem.reservados : 0,
+        pronta_entrega: estoqueItem ? estoqueItem.pronta_entrega : 0
+      };
+
       return reply.status(200).send({
         id: produto.id,
         operacao_id: produto.operacao_id,
@@ -254,6 +271,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
         custo_centavos: produto.custo_centavos,
         custo_formatado: custoFormatado,
         proveniencia_custo: produto.proveniencia_custo,
+        estoque,
         criado_em: produto.criado_em.toISOString(),
         atualizado_em: produto.atualizado_em.toISOString()
       });

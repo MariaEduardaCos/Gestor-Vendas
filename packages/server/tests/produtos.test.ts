@@ -246,8 +246,46 @@ describe('Story 1.3: Produtos, Variantes, Preço de Venda e Custo por Marca', ()
     const duracaoCodigo = Date.now() - t0;
     expect(duracaoCodigo).toBeLessThan(2000);
     expect(resCodigo.statusCode).toBe(200);
-    expect(resCodigo.json().codigo_barras).toBe('7891234567890');
-    expect(resCodigo.json().nome).toBe('Hidratante Tododia Algodão');
+    const prodCodigoJson = resCodigo.json();
+    expect(prodCodigoJson.codigo_barras).toBe('7891234567890');
+    expect(prodCodigoJson.nome).toBe('Hidratante Tododia Algodão');
+    expect(prodCodigoJson.estoque).toEqual({
+      presentes: 0,
+      reservados: 0,
+      pronta_entrega: 0
+    });
+
+    // Lança estoque para o produto e verifica se o endpoint por código de barras reflete o estoque atual
+    await app.inject({
+      method: 'POST',
+      url: '/api/estoque/inicial',
+      headers: { authorization: `Bearer ${tokenSoniaA}` },
+      payload: {
+        produto_id: prodCodigoJson.id,
+        quantidade: 8
+      }
+    });
+
+    const resComEstoque = await app.inject({
+      method: 'GET',
+      url: '/api/produtos/codigo/7891234567890',
+      headers: { authorization: `Bearer ${tokenSoniaA}` }
+    });
+    expect(resComEstoque.statusCode).toBe(200);
+    expect(resComEstoque.json().estoque).toEqual({
+      presentes: 8,
+      reservados: 0,
+      pronta_entrega: 8
+    });
+
+    // Isolamento multi-inquilino: Operação B não pode encontrar produto da Operação A pelo código
+    const resIsolamentoB = await app.inject({
+      method: 'GET',
+      url: '/api/produtos/codigo/7891234567890',
+      headers: { authorization: `Bearer ${tokenOutroB}` }
+    });
+    expect(resIsolamentoB.statusCode).toBe(404);
+    expect(resIsolamentoB.headers['content-type']).toContain('application/problem+json');
 
     // Busca por termo de nome
     const resNome = await app.inject({
@@ -259,6 +297,9 @@ describe('Story 1.3: Produtos, Variantes, Preço de Venda e Custo por Marca', ()
     const lista = resNome.json();
     expect(lista.length).toBeGreaterThanOrEqual(1);
     expect(lista[0].nome).toContain('Algodão');
+    expect(lista[0].estoque).toBeDefined();
+    expect(lista[0].estoque.presentes).toBe(8);
+    expect(lista[0].estoque.pronta_entrega).toBe(8);
 
     // Código não existente retorna 404 RFC 7807
     const resInexistente = await app.inject({
