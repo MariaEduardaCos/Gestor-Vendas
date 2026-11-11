@@ -44,6 +44,15 @@ export function ClienteFichaModal({
   const [entregandoContaId, setEntregandoContaId] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
 
+  // Estado de Cancelamento de Item (Story 4.4)
+  const [itemParaCancelar, setItemParaCancelar] = useState<{
+    contaId: string;
+    itemId: string;
+    nome: string;
+  } | null>(null);
+  const [motivoCancelamento, setMotivoCancelamento] = useState('');
+  const [cancelandoItem, setCancelandoItem] = useState(false);
+
   useEffect(() => {
     if (isOpen && clienteId) {
       carregarFicha();
@@ -210,6 +219,50 @@ export function ClienteFichaModal({
       setErro(err.message);
     } finally {
       setEntregandoContaId(null);
+    }
+  };
+
+  const handleConfirmarCancelamentoItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!itemParaCancelar) return;
+    if (!motivoCancelamento.trim()) {
+      setErro('Informe a justificativa do cancelamento.');
+      return;
+    }
+
+    setCancelandoItem(true);
+    setErro(null);
+    setSucesso(null);
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
+
+      const res = await fetch(
+        `${apiBaseUrl}/contas/${itemParaCancelar.contaId}/itens/${itemParaCancelar.itemId}/cancelar`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ motivo: motivoCancelamento.trim() })
+        }
+      );
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.detail || 'Não foi possível cancelar o item da conta.');
+      }
+
+      const data = await res.json();
+      await carregarFicha();
+      setItemParaCancelar(null);
+      setMotivoCancelamento('');
+      setSucesso(data.mensagem || 'Item cancelado e reserva física liberada com sucesso!');
+      setTimeout(() => setSucesso(null), 4000);
+      if (onClienteAtualizado) onClienteAtualizado();
+    } catch (err: any) {
+      setErro(err.message);
+    } finally {
+      setCancelandoItem(false);
     }
   };
 
@@ -522,12 +575,22 @@ export function ClienteFichaModal({
                                 const isReservado = it.status_entrega === 'RESERVADO_PRESENTE';
                                 const isEntregue = it.status_entrega === 'ENTREGUE';
                                 const isAguardando = it.status_entrega === 'AGUARDANDO_FABRICA';
+                                const isCancelado = it.status_entrega === 'CANCELADO';
                                 const subtotal = it.quantidade * it.preco_unitario_centavos;
 
                                 return (
-                                  <div key={it.id} className="py-2 flex items-center justify-between gap-2 text-xs">
+                                  <div
+                                    key={it.id}
+                                    className={`py-2 flex items-center justify-between gap-2 text-xs ${
+                                      isCancelado ? 'opacity-60' : ''
+                                    }`}
+                                  >
                                     <div className="flex-1 min-w-0">
-                                      <div className="font-semibold text-ink-primary truncate">
+                                      <div
+                                        className={`font-semibold truncate ${
+                                          isCancelado ? 'line-through text-ink-muted' : 'text-ink-primary'
+                                        }`}
+                                      >
                                         {it.quantidade}x {it.produto_nome || 'Produto'}
                                       </div>
                                       <div className="text-ink-secondary text-[11px] flex items-center gap-2 mt-0.5">
@@ -545,6 +608,8 @@ export function ClienteFichaModal({
                                             ? 'bg-amber-100 text-amber-800 border border-amber-300'
                                             : isAguardando
                                             ? 'bg-blue-50 text-blue-700'
+                                            : isCancelado
+                                            ? 'bg-gray-200 text-gray-600 line-through'
                                             : 'bg-gray-100 text-gray-700'
                                         }`}
                                       >
@@ -554,6 +619,8 @@ export function ClienteFichaModal({
                                           ? '📦 Pronto p/ Entrega'
                                           : isAguardando
                                           ? '⏳ Aguardando Fábrica'
+                                          : isCancelado
+                                          ? '✕ Cancelado'
                                           : it.status_entrega}
                                       </span>
 
@@ -572,6 +639,25 @@ export function ClienteFichaModal({
                                               <span>Entregar</span>
                                             </>
                                           )}
+                                        </button>
+                                      )}
+
+                                      {!isEntregue && !isCancelado && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setItemParaCancelar({
+                                              contaId: conta.id,
+                                              itemId: it.id,
+                                              nome: it.produto_nome || 'Produto'
+                                            });
+                                            setMotivoCancelamento('');
+                                          }}
+                                          title="Cancelar este item da conta e liberar reserva física"
+                                          className="min-h-[48px] px-2.5 py-1.5 rounded-lg border border-red-300 text-red-600 hover:bg-red-50 font-semibold text-xs shadow-sm transition-colors flex items-center justify-center gap-1"
+                                        >
+                                          <span>✕</span>
+                                          <span className="sr-only sm:not-sr-only">Cancelar</span>
                                         </button>
                                       )}
                                     </div>
@@ -727,6 +813,67 @@ export function ClienteFichaModal({
           </button>
         </div>
       </div>
+
+      {/* Modal Sobreposto para Cancelar Item com Motivo */}
+      {itemParaCancelar && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirmar Cancelamento do Item"
+          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-ink-primary/60 backdrop-blur-xs"
+        >
+          <div className="w-full max-w-md bg-surface-raised rounded-xl p-5 shadow-2xl border border-status-alert/30 flex flex-col gap-3">
+            <h3 className="text-title-md font-bold text-status-alert flex items-center gap-2">
+              <span>⚠️</span>
+              <span>Cancelar Item da Venda</span>
+            </h3>
+            <p className="text-body-md text-ink-secondary">
+              Você está cancelando: <strong className="text-ink-primary">{itemParaCancelar.nome}</strong>.
+            </p>
+            <p className="text-meta text-ink-secondary">
+              Se este item possuir reserva física, as unidades retornarão imediatamente ao estoque de pronta-entrega.
+            </p>
+
+            <form onSubmit={handleConfirmarCancelamentoItem} className="flex flex-col gap-3">
+              <div>
+                <label htmlFor="motivoCancelamento" className="block text-meta font-bold text-ink-primary mb-1">
+                  Motivo do cancelamento (obrigatório):
+                </label>
+                <textarea
+                  id="motivoCancelamento"
+                  required
+                  rows={3}
+                  value={motivoCancelamento}
+                  onChange={(e) => setMotivoCancelamento(e.target.value)}
+                  placeholder="Ex: Cliente desistiu antes do envio, produto avariado..."
+                  className="w-full p-2.5 rounded-lg border border-border-hairline bg-surface-sunken text-body-md text-ink-primary focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={cancelandoItem}
+                  onClick={() => {
+                    setItemParaCancelar(null);
+                    setMotivoCancelamento('');
+                  }}
+                  className="min-h-[48px] px-4 rounded-lg text-ink-secondary hover:bg-surface-sunken font-semibold text-body-md"
+                >
+                  Voltar
+                </button>
+                <button
+                  type="submit"
+                  disabled={cancelandoItem || !motivoCancelamento.trim()}
+                  className="min-h-[48px] px-5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-body-md shadow-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {cancelandoItem ? 'Cancelando...' : 'Confirmar Cancelamento'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

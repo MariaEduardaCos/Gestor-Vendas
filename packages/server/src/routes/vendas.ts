@@ -707,6 +707,210 @@ export const vendasRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
   );
+
+  // POST /api/contas/:id/itens/:itemId/cancelar - Cancelamento de item não entregue com liberação de reserva para pronta-entrega (FR-029, D-09, AD-3, NFR-001, NFR-003)
+  fastify.post<{ Params: { id: string; itemId: string }; Body: { motivo: string } }>(
+    '/api/contas/:id/itens/:itemId/cancelar',
+    { preHandler: fastify.requireSession },
+    async (request, reply) => {
+      const { id, itemId } = request.params;
+      const { motivo } = request.body || {};
+      const session = request.session!;
+
+      if (!motivo || typeof motivo !== 'string' || motivo.trim().length === 0) {
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(400, 'MOTIVO_OBRIGATORIO', 'Motivo Obrigatório', 'Informe o motivo do cancelamento do item.')
+        );
+      }
+
+      try {
+        const resultado = await (request.tenantPrisma as any).$transaction(async (tx: any) => {
+          const itemConta = await tx.itemConta.findFirst({
+            where: {
+              id: itemId.trim(),
+              conta_id: id.trim(),
+              operacao_id: session.operacaoId
+            },
+            include: {
+              produto: true,
+              conta: {
+                include: { cliente: true }
+              }
+            }
+          });
+
+          if (!itemConta) {
+            throw new DomainError(
+              createProblemDetails(404, 'ITEM_NAO_ENCONTRADO', 'Item Não Encontrado', 'O item informado não foi encontrado nesta conta.')
+            );
+          }
+
+          if (itemConta.status_entrega === 'ENTREGUE') {
+            throw new DomainError(
+              createProblemDetails(400, 'ITEM_JA_ENTREGUE', 'Item Já Entregue', 'Produtos já entregues fisicamente ao cliente não podem ser cancelados por esta via.')
+            );
+          }
+
+          if (itemConta.status_entrega === 'CANCELADO') {
+            throw new DomainError(
+              createProblemDetails(400, 'ITEM_JA_CANCELADO', 'Item Já Cancelado', 'Este item já foi cancelado anteriormente.')
+            );
+          }
+
+          // Se estava reservado na estante/armário, libera a reserva de volta para a pronta-entrega (AD-3, FR-029)
+          if (itemConta.status_entrega === 'RESERVADO_PRESENTE') {
+            const estoqueDb = await tx.estoqueItem.findFirst({
+              where: {
+                operacao_id: session.operacaoId,
+                produto_id: itemConta.produto_id
+              }
+            });
+
+            if (!estoqueDb) {
+              throw badRequestError('Registro de estoque não encontrado para o produto.');
+            }
+
+            const itemEstoqueDomain = new EstoqueItem({
+              id: estoqueDb.id,
+              operacaoId: session.operacaoId,
+              produtoId: itemConta.produto_id,
+              presentes: estoqueDb.presentes,
+              reservados: estoqueDb.reservados,
+              prontaEntrega: estoqueDb.pronta_entrega
+            });
+
+            // Liberação de reserva: reservados -= qtd, pronta_entrega += qtd, presentes inalterado!
+            itemEstoqueDomain.cancelarReserva(itemConta.quantidade);
+
+            await tx.estoqueItem.update({
+              where: { id: itemEstoqueDomain.id },
+              data: {
+                presentes: itemEstoqueDomain.presentes,
+                reservados: itemEstoqueDomain.reservados,
+                pronta_entrega: itemEstoqueDomain.prontaEntrega
+              }
+            });
+
+            await tx.movimentacaoEstoque.create({
+              data: {
+                id: gerarUuidV7(),
+                operacao_id: session.operacaoId,
+                produto_id: itemConta.produto_id,
+                estoque_item_id: itemEstoqueDomain.id,
+                tipo: 'CANCELAMENTO_RESERVA',
+                quantidade: itemConta.quantidade,
+                presentes_anterior: estoqueDb.presentes,
+                presentes_posterior: itemEstoqueDomain.presentes,
+                reservados_anterior: estoqueDb.reservados,
+                reservados_posterior: itemEstoqueDomain.reservados,
+                pronta_entrega_anterior: estoqueDb.pronta_entrega,
+                pronta_entrega_posterior: itemEstoqueDomain.prontaEntrega,
+                operador_id: session.operadorId,
+                operador_nome: session.operadorNome,
+                detalhes: `Cancelamento de item por desistência da cliente: ${motivo.trim()}`
+              }
+            });
+          }
+
+          // Atualiza status do item para CANCELADO
+          const itemAtualizado = await tx.itemConta.update({
+            where: { id: itemConta.id },
+            data: { status_entrega: 'CANCELADO' }
+          });
+
+          // Recalcula o valor total da conta sem o item cancelado
+          const itensAtivos = await tx.itemConta.findMany({
+            where: {
+              conta_id: id.trim(),
+              operacao_id: session.operacaoId,
+              status_entrega: { not: 'CANCELADO' }
+            }
+          });
+
+          const novoValorTotal = itensAtivos.reduce(
+            (acc: number, cur: any) => acc + cur.quantidade * cur.preco_unitario_centavos,
+            0
+          );
+
+          let novoStatusConta = itemConta.conta.status;
+          if (novoValorTotal === 0 && itemConta.conta.total_pago === 0) {
+            novoStatusConta = 'CANCELADA';
+          } else if (itemConta.conta.total_pago >= novoValorTotal && novoValorTotal > 0) {
+            novoStatusConta = 'QUITADA';
+          }
+
+          const contaAtualizada = await tx.conta.update({
+            where: { id: id.trim() },
+            data: {
+              valor_total: novoValorTotal,
+              status: novoStatusConta
+            }
+          });
+
+          // Se houver excedente contábil pago pela cliente (total_pago > novoValorTotal), emite obrigação contábil
+          let excedenteCentavos = 0;
+          if (itemConta.conta.total_pago > novoValorTotal) {
+            excedenteCentavos = itemConta.conta.total_pago - novoValorTotal;
+            await tx.registroAuditoria.create({
+              data: {
+                id: gerarUuidV7(),
+                operacao_id: session.operacaoId,
+                operador_id: session.operadorId,
+                operador_nome: session.operadorNome,
+                acao: 'OBRIGACAO_CONTABIL_EXCEDENTE_CANCELAMENTO',
+                detalhes: JSON.stringify({
+                  conta_id: id,
+                  cliente_id: itemConta.conta.cliente_id,
+                  cliente_nome: itemConta.conta.cliente.nome,
+                  excedente_centavos: excedenteCentavos,
+                  motivo: motivo.trim()
+                })
+              }
+            });
+          }
+
+          // Auditoria nominal do cancelamento (NFR-003)
+          await tx.registroAuditoria.create({
+            data: {
+              id: gerarUuidV7(),
+              operacao_id: session.operacaoId,
+              operador_id: session.operadorId,
+              operador_nome: session.operadorNome,
+              acao: 'CANCELAMENTO_ITEM_CONTA',
+              detalhes: JSON.stringify({
+                conta_id: id,
+                item_conta_id: itemId,
+                produto_id: itemConta.produto_id,
+                quantidade: itemConta.quantidade,
+                motivo: motivo.trim(),
+                novo_valor_total_conta: novoValorTotal,
+                excedente_gerado: excedenteCentavos
+              })
+            }
+          });
+
+          return {
+            mensagem: 'Item cancelado com sucesso e reserva física liberada para pronta-entrega.',
+            item: itemAtualizado,
+            conta: contaAtualizada,
+            excedente_gerado_centavos: excedenteCentavos
+          };
+        });
+
+        return reply.status(200).send(resultado);
+      } catch (err: any) {
+        if (err instanceof DomainError) {
+          return reply.status(err.problem.status).type('application/problem+json').send(err.problem);
+        }
+        if (err.problem) {
+          return reply.status(err.problem.status).type('application/problem+json').send(err.problem);
+        }
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(400, 'BAD_REQUEST', 'Erro ao Cancelar Item', err.message || 'Erro inesperado.')
+        );
+      }
+    }
+  );
 };
 
 export function calcularStatusEntregaConta(itens: Array<{ status_entrega: string }>): string {

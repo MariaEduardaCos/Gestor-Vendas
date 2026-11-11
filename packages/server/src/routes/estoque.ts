@@ -248,6 +248,134 @@ export const estoqueRoutes: FastifyPluginAsync = async (fastify) => {
     }
   );
 
+  // POST /api/estoque/:produtoId/ajuste - Ajuste Justificado de Inventário com Trava de Segurança (FR-030, Refinamento Elicitação, AD-3, NFR-001, NFR-003)
+  fastify.post<{ Params: { produtoId: string }; Body: { nova_contagem_presentes: number; justificativa: string } }>(
+    '/api/estoque/:produtoId/ajuste',
+    { preHandler: fastify.requireSession },
+    async (request, reply) => {
+      const { produtoId } = request.params;
+      const { nova_contagem_presentes, justificativa } = request.body || {};
+      const session = request.session!;
+
+      if (!Number.isInteger(nova_contagem_presentes) || nova_contagem_presentes < 0) {
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(400, 'CONTAGEM_INVALIDA', 'Contagem Inválida', 'A nova contagem física deve ser um número inteiro maior ou igual a zero.')
+        );
+      }
+
+      if (!justificativa || typeof justificativa !== 'string' || justificativa.trim().length === 0) {
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(400, 'JUSTIFICATIVA_OBRIGATORIA', 'Justificativa Obrigatória', 'Informe a justificativa do ajuste de inventário.')
+        );
+      }
+
+      const produto = await request.tenantPrisma.produto.findUnique({
+        where: { id: produtoId.trim() }
+      });
+
+      if (!produto) {
+        return reply.status(404).type('application/problem+json').send(
+          createProblemDetails(404, 'PRODUTO_NAO_ENCONTRADO', 'Produto Não Encontrado', 'O produto informado não existe nesta operação.')
+        );
+      }
+
+      const estoqueExistente = await request.tenantPrisma.estoqueItem.findFirst({
+        where: { produto_id: produto.id }
+      });
+
+      if (!estoqueExistente) {
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(400, 'ESTOQUE_INEXISTENTE', 'Estoque Inexistente', 'Este produto ainda não possui registro de estoque inicial.')
+        );
+      }
+
+      // Trava de segurança impeditiva (FR-030, AD-3): Bloqueia redução abaixo de reservas ativas!
+      if (nova_contagem_presentes < estoqueExistente.reservados) {
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(
+            400,
+            'AJUSTE_ABAIXO_DE_RESERVAS',
+            'Ajuste Bloqueado por Reservas Ativas',
+            `Não é permitido reduzir a contagem física para ${nova_contagem_presentes} unidade(s) pois existem ${estoqueExistente.reservados} unidade(s) reservadas ativas para clientes. Resolva ou desvincule as reservas antes de ajustar.`
+          )
+        );
+      }
+
+      // Aplica regra de domínio
+      const itemDomain = new EstoqueItem({
+        id: estoqueExistente.id,
+        operacaoId: session.operacaoId,
+        produtoId: produto.id,
+        presentes: estoqueExistente.presentes,
+        reservados: estoqueExistente.reservados,
+        prontaEntrega: estoqueExistente.pronta_entrega
+      });
+
+      itemDomain.ajustarContagemFisica(nova_contagem_presentes, justificativa.trim());
+
+      const diferenca = Math.abs(nova_contagem_presentes - estoqueExistente.presentes);
+
+      const { estoqueAtualizado, movAtualizada } = await (request.tenantPrisma as any).$transaction(async (tx: any) => {
+        const ep = await tx.estoqueItem.update({
+          where: { id: itemDomain.id },
+          data: {
+            presentes: itemDomain.presentes,
+            reservados: itemDomain.reservados,
+            pronta_entrega: itemDomain.prontaEntrega
+          }
+        });
+
+        const mp = await tx.movimentacaoEstoque.create({
+          data: {
+            id: gerarUuidV7(),
+            operacao_id: session.operacaoId,
+            produto_id: produto.id,
+            estoque_item_id: itemDomain.id,
+            tipo: 'AJUSTE_BALANCO',
+            quantidade: diferenca,
+            presentes_anterior: estoqueExistente.presentes,
+            presentes_posterior: itemDomain.presentes,
+            reservados_anterior: estoqueExistente.reservados,
+            reservados_posterior: itemDomain.reservados,
+            pronta_entrega_anterior: estoqueExistente.pronta_entrega,
+            pronta_entrega_posterior: itemDomain.prontaEntrega,
+            operador_id: session.operadorId,
+            operador_nome: session.operadorNome,
+            detalhes: justificativa.trim()
+          }
+        });
+
+        await tx.registroAuditoria.create({
+          data: {
+            id: gerarUuidV7(),
+            operacao_id: session.operacaoId,
+            operador_id: session.operadorId,
+            operador_nome: session.operadorNome,
+            acao: 'AJUSTE_INVENTARIO',
+            detalhes: JSON.stringify({
+              produto_id: produto.id,
+              produto_nome: produto.nome,
+              contagem_anterior: estoqueExistente.presentes,
+              nova_contagem: nova_contagem_presentes,
+              justificativa: justificativa.trim()
+            })
+          }
+        });
+
+        return { estoqueAtualizado: ep, movAtualizada: mp };
+      });
+
+      return reply.status(200).send({
+        id: estoqueAtualizado.id,
+        produto_id: estoqueAtualizado.produto_id,
+        presentes: estoqueAtualizado.presentes,
+        reservados: estoqueAtualizado.reservados,
+        pronta_entrega: estoqueAtualizado.pronta_entrega,
+        movimentacao: movAtualizada
+      });
+    }
+  );
+
   // GET /api/estoque/:produtoId - Consulta estoque e extrato de um produto específico
   fastify.get<{ Params: { produtoId: string } }>(
     '/api/estoque/:produtoId',

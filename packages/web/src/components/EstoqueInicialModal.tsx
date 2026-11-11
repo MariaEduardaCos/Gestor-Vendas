@@ -69,6 +69,23 @@ export function EstoqueInicialModal({
       return;
     }
 
+    const isAjuste = Boolean(estoqueAtual && (estoqueAtual.presentes > 0 || (estoqueAtual.reservados ?? 0) > 0));
+    const reservados = estoqueAtual?.reservados ?? 0;
+
+    if (isAjuste && quantidade < reservados) {
+      setErro(
+        `Trava de Segurança: Não é permitido reduzir a contagem física para ${quantidade} unidade(s) pois existem ${reservados} unidade(s) reservadas para clientes (FR-030).`
+      );
+      setSalvando(false);
+      return;
+    }
+
+    if (isAjuste && !observacao.trim()) {
+      setErro('A justificativa do ajuste de inventário é obrigatória.');
+      setSalvando(false);
+      return;
+    }
+
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json'
@@ -77,30 +94,48 @@ export function EstoqueInicialModal({
         headers['Authorization'] = `Bearer ${sessionToken}`;
       }
 
-      const res = await fetch('/api/estoque/inicial', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          produto_id: produto.id,
-          quantidade,
-          observacao: observacao.trim() || undefined
-        })
-      });
+      let res: Response;
+      if (isAjuste) {
+        // Rota de Ajuste Justificado de Inventário (FR-030, AD-3)
+        res = await fetch(`/api/estoque/${produto.id}/ajuste`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            nova_contagem_presentes: quantidade,
+            justificativa: observacao.trim()
+          })
+        });
+      } else {
+        // Lançamento de Estoque Inicial (Story 1.4)
+        res = await fetch('/api/estoque/inicial', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            produto_id: produto.id,
+            quantidade,
+            observacao: observacao.trim() || undefined
+          })
+        });
+      }
 
       if (!res.ok) {
         const errJson = await res.json().catch(() => null);
-        throw new Error(errJson?.detail || 'Erro ao lançar estoque inicial do produto.');
+        throw new Error(errJson?.detail || 'Erro ao atualizar contagem de estoque do produto.');
       }
 
       onEstoqueAtualizado();
       onClose();
     } catch (err: any) {
-      setErro(err.message || 'Falha ao salvar estoque inicial.');
+      setErro(err.message || 'Falha ao salvar estoque.');
     } finally {
       setSalvando(false);
     }
   };
 
+  const isAjuste = Boolean(estoqueAtual && (estoqueAtual.presentes > 0 || (estoqueAtual.reservados ?? 0) > 0));
+  const reservados = estoqueAtual?.reservados ?? 0;
+  const prontaEntregaCalculada = Math.max(0, quantidade - reservados);
+  const violaTravaReservas = isAjuste && quantidade < reservados;
   const nomeExibicao = `${produto.nome}${produto.variante ? ` — ${produto.variante}` : ''}`;
 
   return (
@@ -115,10 +150,10 @@ export function EstoqueInicialModal({
         <div className="flex items-start justify-between gap-3 border-b border-border-hairline pb-3">
           <div>
             <span className="text-meta font-bold uppercase tracking-wider text-brand-primary block">
-              Contagem Física da Estante
+              {isAjuste ? 'Ajuste de Inventário (FR-030)' : 'Contagem Física da Estante'}
             </span>
             <h2 id="modal-estoque-titulo" className="text-title-lg font-bold text-ink-primary">
-              Estoque Inicial do Produto
+              {isAjuste ? 'Ajustar Inventário Físico' : 'Estoque Inicial do Produto'}
             </h2>
             <p className="text-body-md text-ink-secondary mt-0.5">
               {nomeExibicao}
@@ -140,13 +175,28 @@ export function EstoqueInicialModal({
           <span className="text-2xl select-none" aria-hidden="true">🗄️</span>
           <div className="text-sm space-y-1">
             <p className="font-semibold text-brand-primary">
-              Produtos que você já tem em casa
+              {isAjuste ? 'Recontagem ou Acerto Físico de Armário' : 'Produtos que você já tem em casa'}
             </p>
             <p className="text-ink-secondary text-[14px] leading-relaxed">
-              Conte quantas unidades você já possui fisicamente no armário ou estante. Elas serão registradas como <strong>Pronta-Entrega</strong> para venda imediata, sem gerar cobranças ou notas falsas junto à fábrica.
+              {isAjuste
+                ? 'Atualize a contagem real dos frascos presentes. O sistema protege reservas de clientes e registra a justificativa nominal na auditoria.'
+                : 'Conte quantas unidades você já possui fisicamente no armário ou estante. Elas serão registradas como Pronta-Entrega para venda imediata, sem gerar cobranças falsas junto à fábrica.'}
             </p>
           </div>
         </div>
+
+        {/* Alerta de Trava de Segurança de Reservas Ativas (FR-030) */}
+        {violaTravaReservas && (
+          <div className="p-3 bg-red-50 border border-red-300 text-red-800 rounded-md text-sm font-semibold flex items-start gap-2">
+            <span>🛡️</span>
+            <div>
+              <span>Trava de Segurança Ativa:</span>
+              <p className="font-normal text-xs mt-0.5">
+                Não é permitido reduzir a contagem física para menos que as {reservados} unidades já reservadas para clientes. Cancele ou desvincule as reservas afetadas antes de ajustar (FR-030, AD-3).
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Erro */}
         {erro && (
@@ -219,29 +269,30 @@ export function EstoqueInicialModal({
               </div>
               <div className="bg-status-available-bg/60 text-status-available rounded-md p-2">
                 <span className="text-meta block">Pronta-Entrega</span>
-                <span className="text-title-md font-bold">{quantidade}</span>
+                <span className="text-title-md font-bold">{prontaEntregaCalculada}</span>
               </div>
               <div className="bg-status-reserved-bg text-status-reserved rounded-md p-2">
                 <span className="text-meta block">Reservados</span>
-                <span className="text-title-md font-bold">0</span>
+                <span className="text-title-md font-bold">{reservados}</span>
               </div>
             </div>
             <p className="text-[12px] text-ink-muted text-center mt-2">
-              Presentes ({quantidade}) = Reservados (0) + Pronta-Entrega ({quantidade})
+              Presentes ({quantidade}) = Reservados ({reservados}) + Pronta-Entrega ({prontaEntregaCalculada})
             </p>
           </div>
 
-          {/* Campo de Observação Opcional */}
+          {/* Campo de Justificativa / Observação */}
           <div className="flex flex-col gap-1">
             <label htmlFor="obs-estoque" className="text-label-strong text-ink-secondary text-sm">
-              Observação ou local físico (opcional):
+              {isAjuste ? 'Justificativa do Ajuste de Inventário (obrigatória) *' : 'Observação ou local físico (opcional):'}
             </label>
             <input
               id="obs-estoque"
               type="text"
+              required={isAjuste}
               value={observacao}
               onChange={(e) => setObservacao(e.target.value)}
-              placeholder="Ex: Estante da sala, gaveta de amostras..."
+              placeholder={isAjuste ? 'Ex: 1 frasco danificado/quebrado descartado; acerto de contagem...' : 'Ex: Estante da sala, gaveta de amostras...'}
               className="min-h-touch-target px-3 border border-border-strong rounded-md bg-surface-base text-ink-primary text-body-md focus:outline-brand-primary"
             />
           </div>
@@ -259,7 +310,7 @@ export function EstoqueInicialModal({
 
             <button
               type="submit"
-              disabled={salvando}
+              disabled={salvando || violaTravaReservas || (isAjuste && !observacao.trim())}
               className="w-full sm:w-auto min-h-touch-target px-6 py-2.5 rounded-md bg-brand-primary hover:bg-brand-hover text-ink-inverse font-bold text-label-strong shadow-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
             >
               {salvando ? (
@@ -270,7 +321,7 @@ export function EstoqueInicialModal({
               ) : (
                 <>
                   <span>✓</span>
-                  <span>Confirmar Estoque Inicial</span>
+                  <span>{isAjuste ? 'Confirmar Ajuste de Inventário' : 'Confirmar Estoque Inicial'}</span>
                 </>
               )}
             </button>
