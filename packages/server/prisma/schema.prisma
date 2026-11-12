@@ -26,6 +26,8 @@ model Operacao {
   compras_marca    CompraMarca[]
   itens_compra_marca ItemCompraMarca[]
   registros_idempotencia RegistroIdempotencia[]
+  pagamentos_conta PagamentoConta[]
+  excedentes_pendentes ExcedentePendente[]
 
   @@map("operacoes")
 }
@@ -89,6 +91,7 @@ model Cliente {
   contas     Conta[]
   encomendas Encomenda[]
   itens_compra_marca ItemCompraMarca[]
+  excedentes ExcedentePendente[]
 
   @@index([operacao_id])
   @@index([operacao_id, nome])
@@ -106,10 +109,12 @@ model Conta {
   status       String   @default("ABERTA")
   criado_em    DateTime @default(now())
 
-  cliente   Cliente     @relation(fields: [cliente_id], references: [id], onDelete: Restrict)
-  operacao  Operacao    @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
-  encomenda Encomenda?  @relation(fields: [encomenda_id], references: [id], onDelete: SetNull)
-  itens     ItemConta[]
+  cliente    Cliente             @relation(fields: [cliente_id], references: [id], onDelete: Restrict)
+  operacao   Operacao            @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+  encomenda  Encomenda?          @relation(fields: [encomenda_id], references: [id], onDelete: SetNull)
+  itens      ItemConta[]
+  pagamentos PagamentoConta[]
+  excedentes ExcedentePendente[]
 
   @@index([operacao_id])
   @@index([cliente_id])
@@ -324,5 +329,57 @@ model RegistroIdempotencia {
   @@index([operacao_id, chave])
   @@map("registros_idempotencia")
 }
+
+model PagamentoConta {
+  id                     String    @id
+  operacao_id            String
+  conta_id               String
+  valor_pago_centavos    Int
+  taxa_cartao_centavos   Int       @default(0)
+  valor_liquido_centavos Int
+  forma_pagamento        String    // "DINHEIRO" | "PIX" | "CARTAO" | "CREDITO_CARTEIRA"
+  data_pagamento         DateTime  @default(now())
+  status                 String    @default("CONFIRMADO") // "CONFIRMADO" | "ESTORNADO"
+  motivo_estorno         String?
+  estornado_em           DateTime?
+  estornado_por          String?
+  operador_id            String
+  operador_nome          String
+  criado_em              DateTime  @default(now())
+
+  operacao Operacao @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+  conta    Conta    @relation(fields: [conta_id], references: [id], onDelete: Cascade)
+
+  @@index([operacao_id])
+  @@index([conta_id])
+  @@index([operacao_id, conta_id])
+  @@map("pagamentos_conta")
+}
+
+model ExcedentePendente {
+  id               String    @id
+  operacao_id      String
+  conta_id         String
+  cliente_id       String
+  valor_centavos   Int
+  origem           String    // "CANCELAMENTO_ITEM" | "FALTA_FABRICA"
+  status           String    @default("PENDENTE") // "PENDENTE" | "DEVOLVIDO_DINHEIRO" | "CONVERTIDO_CREDITO"
+  resolvido_em     DateTime?
+  motivo_resolucao String?
+  operador_id      String
+  operador_nome    String
+  criado_em        DateTime  @default(now())
+
+  operacao Operacao @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+  conta    Conta    @relation(fields: [conta_id], references: [id], onDelete: Cascade)
+  cliente  Cliente  @relation(fields: [cliente_id], references: [id], onDelete: Cascade)
+
+  @@index([operacao_id])
+  @@index([cliente_id])
+  @@index([conta_id])
+  @@index([operacao_id, status])
+  @@map("excedentes_pendentes")
+}
+
 
 

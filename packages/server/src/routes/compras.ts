@@ -1203,6 +1203,22 @@ export const comprasRoutes: FastifyPluginAsync = async (fastify) => {
                   detalhes: JSON.stringify(obrigacaoContabil)
                 }
               });
+
+              // Criar entidade ExcedentePendente para resolução transparente (FR-038, AD-5)
+              await tx.excedentePendente.create({
+                data: {
+                  id: gerarUuidV7(),
+                  operacao_id: session.operacaoId,
+                  conta_id: contaAtual.id,
+                  cliente_id: contaAtual.cliente_id,
+                  valor_centavos: excedenteCentavos,
+                  origem: 'FALTA_FABRICA',
+                  status: 'PENDENTE',
+                  operador_id: session.operadorId,
+                  operador_nome: session.operadorNome,
+                  criado_em: new Date()
+                }
+              });
             }
 
             // Atualiza a Conta

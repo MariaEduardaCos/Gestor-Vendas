@@ -53,6 +53,24 @@ export function ClienteFichaModal({
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
   const [cancelandoItem, setCancelandoItem] = useState(false);
 
+  // Estados do Épico 5 (Contas, Cobrança Transparente, Pagamentos, Estorno e Excedentes)
+  const [visaoSemAguardados, setVisaoSemAguardados] = useState<Record<string, boolean>>({});
+  
+  // Registro de Pagamento (Story 5.2)
+  const [contaParaPagar, setContaParaPagar] = useState<any | null>(null);
+  const [valorPagamento, setValorPagamento] = useState('');
+  const [formaPagamento, setFormaPagamento] = useState<'PIX' | 'DINHEIRO' | 'CARTAO' | 'CREDITO_CARTEIRA'>('PIX');
+  const [taxaCartao, setTaxaCartao] = useState('');
+  const [salvandoPagamento, setSalvandoPagamento] = useState(false);
+
+  // Estorno de Pagamento (Story 5.3)
+  const [pagamentoParaEstornar, setPagamentoParaEstornar] = useState<{ id: string; valor: number } | null>(null);
+  const [motivoEstorno, setMotivoEstorno] = useState('');
+  const [estornandoPagamento, setEstornandoPagamento] = useState(false);
+
+  // Resolução de Excedente (Story 5.4)
+  const [resolvendoExcedenteId, setResolvendoExcedenteId] = useState<string | null>(null);
+
   useEffect(() => {
     if (isOpen && clienteId) {
       carregarFicha();
@@ -263,6 +281,143 @@ export function ClienteFichaModal({
       setErro(err.message);
     } finally {
       setCancelandoItem(false);
+    }
+  };
+
+  const handleRegistrarPagamento = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!contaParaPagar) return;
+
+    const valorFloat = parseFloat(valorPagamento.replace(',', '.'));
+    if (isNaN(valorFloat) || valorFloat <= 0) {
+      setErro('Informe um valor de pagamento válido maior que zero.');
+      return;
+    }
+    const valorCentavos = Math.round(valorFloat * 100);
+
+    let taxaCentavos = 0;
+    if (formaPagamento === 'CARTAO' && taxaCartao.trim()) {
+      const taxaFloat = parseFloat(taxaCartao.replace(',', '.'));
+      if (!isNaN(taxaFloat) && taxaFloat > 0) {
+        taxaCentavos = Math.round(taxaFloat * 100);
+      }
+    }
+
+    setSalvandoPagamento(true);
+    setErro(null);
+    setSucesso(null);
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
+
+      const res = await fetch(`${apiBaseUrl}/contas/${contaParaPagar.id}/pagamentos`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          valor_centavos: valorCentavos,
+          forma_pagamento: formaPagamento,
+          taxa_cartao_centavos: taxaCentavos
+        })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.detail || 'Erro ao registrar pagamento.');
+      }
+
+      await carregarFicha();
+      setContaParaPagar(null);
+      setValorPagamento('');
+      setTaxaCartao('');
+      setSucesso('Pagamento registrado com sucesso!');
+      setTimeout(() => setSucesso(null), 4000);
+      if (onClienteAtualizado) onClienteAtualizado();
+    } catch (err: any) {
+      setErro(err.message);
+    } finally {
+      setSalvandoPagamento(false);
+    }
+  };
+
+  const handleEstornarPagamento = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pagamentoParaEstornar) return;
+    if (!motivoEstorno.trim()) {
+      setErro('Informe o motivo do estorno.');
+      return;
+    }
+
+    setEstornandoPagamento(true);
+    setErro(null);
+    setSucesso(null);
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
+
+      const res = await fetch(`${apiBaseUrl}/pagamentos/${pagamentoParaEstornar.id}/estorno`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ motivo: motivoEstorno.trim() })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.detail || 'Erro ao estornar pagamento.');
+      }
+
+      await carregarFicha();
+      setPagamentoParaEstornar(null);
+      setMotivoEstorno('');
+      setSucesso('Pagamento estornado com sucesso e saldo reaberto!');
+      setTimeout(() => setSucesso(null), 4000);
+      if (onClienteAtualizado) onClienteAtualizado();
+    } catch (err: any) {
+      setErro(err.message);
+    } finally {
+      setEstornandoPagamento(false);
+    }
+  };
+
+  const handleResolverExcedente = async (
+    excedenteId: string,
+    acao: 'DEVOLVER_DINHEIRO' | 'CONVERTER_CREDITO'
+  ) => {
+    setResolvendoExcedenteId(excedenteId);
+    setErro(null);
+    setSucesso(null);
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
+
+      const res = await fetch(`${apiBaseUrl}/excedentes/${excedenteId}/resolver`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          acao,
+          motivo: acao === 'CONVERTER_CREDITO' ? 'Convertido em crédito na carteira' : 'Devolvido em dinheiro/Pix'
+        })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.detail || 'Erro ao resolver excedente.');
+      }
+
+      await carregarFicha();
+      setSucesso(
+        acao === 'CONVERTER_CREDITO'
+          ? 'Excedente guardado como crédito na carteira!'
+          : 'Devolução de excedente registrada!'
+      );
+      setTimeout(() => setSucesso(null), 4000);
+      if (onClienteAtualizado) onClienteAtualizado();
+    } catch (err: any) {
+      setErro(err.message);
+    } finally {
+      setResolvendoExcedenteId(null);
     }
   };
 
@@ -528,6 +683,66 @@ export function ClienteFichaModal({
                             </span>
                           </div>
 
+                          {/* Toggle da Visão Sem Itens Aguardados (Story 5.1, UX-DR6, AD-4) */}
+                          <div className="flex items-center justify-between gap-2 pt-1 border-t border-border-hairline/60">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setVisaoSemAguardados((prev) => ({
+                                  ...prev,
+                                  [conta.id]: !prev[conta.id]
+                                }))
+                              }
+                              className={`min-h-[44px] px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors flex items-center gap-1.5 ${
+                                visaoSemAguardados[conta.id]
+                                  ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                                  : 'bg-surface-raised text-ink-primary border-border-hairline hover:bg-surface-sunken'
+                              }`}
+                            >
+                              <span>{visaoSemAguardados[conta.id] ? '✓' : '👁️'}</span>
+                              <span>
+                                {visaoSemAguardados[conta.id]
+                                  ? 'Apenas o que Já Chegou Ativado'
+                                  : 'Ver Apenas o que Já Chegou'}
+                              </span>
+                            </button>
+
+                            {pendente > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setContaParaPagar(conta);
+                                  const sugerido = visaoSemAguardados[conta.id]
+                                    ? Math.min(cobravelHoje, pendente)
+                                    : pendente;
+                                  setValorPagamento((sugerido / 100).toFixed(2));
+                                  setFormaPagamento('PIX');
+                                  setTaxaCartao('');
+                                }}
+                                className="min-h-[44px] px-3.5 py-1.5 bg-brand-primary hover:bg-brand-hover text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition-colors"
+                              >
+                                <span>💰</span>
+                                <span>+ Pagar / Receber</span>
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Banner de Cobrança Justa (UX-DR6) */}
+                          {visaoSemAguardados[conta.id] && (
+                            <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex flex-col gap-0.5">
+                              <span className="font-bold flex items-center gap-1">
+                                <span>✨</span>
+                                <span>Cobrança Justa Ativada (Visão Sem Aguardados)</span>
+                              </span>
+                              <span>
+                                Considerando apenas produtos disponíveis ou entregues ({formatarMoeda(conta.total_sem_aguardados ?? 0)}).
+                              </span>
+                              <span className="font-semibold text-blue-700">
+                                Saldo cobrável justo hoje: {formatarMoeda(cobravelHoje)}
+                              </span>
+                            </div>
+                          )}
+
                           <div className="flex items-center justify-between text-meta flex-wrap gap-1">
                             <span className="text-ink-secondary">
                               Pago: {formatarMoeda(conta.total_pago)}
@@ -538,11 +753,55 @@ export function ClienteFichaModal({
                             </span>
                           </div>
 
-                          {aguardandoFabrica && (
+                          {aguardandoFabrica && !visaoSemAguardados[conta.id] && (
                             <div className="px-2.5 py-1 bg-status-waiting-bg rounded text-meta text-status-waiting font-medium">
                               ⏳ Itens aguardando fábrica: R$ 0,00 cobrável hoje (AD-4)
                             </div>
                           )}
+
+                          {/* Excedentes Pendentes da Conta (Story 5.4, UX-DR8) */}
+                          {conta.excedentes &&
+                            conta.excedentes.filter((e) => e.status === 'PENDENTE').length > 0 && (
+                              <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg flex flex-col gap-2">
+                                <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+                                  <span>⚠️</span>
+                                  <span>Excedente a Devolver / Creditar:</span>
+                                </div>
+                                {conta.excedentes
+                                  .filter((e) => e.status === 'PENDENTE')
+                                  .map((exc) => (
+                                    <div key={exc.id} className="flex flex-col gap-2">
+                                      <p className="text-xs text-amber-800">
+                                        A cliente pagou a mais o valor de{' '}
+                                        <strong>{formatarMoeda(exc.valor_centavos)}</strong>{' '}
+                                        devido ao cancelamento/falta.
+                                      </p>
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <button
+                                          type="button"
+                                          disabled={resolvendoExcedenteId === exc.id}
+                                          onClick={() =>
+                                            handleResolverExcedente(exc.id, 'DEVOLVER_DINHEIRO')
+                                          }
+                                          className="min-h-[44px] flex-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors disabled:opacity-50"
+                                        >
+                                          💵 Devolver em Dinheiro / Pix
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={resolvendoExcedenteId === exc.id}
+                                          onClick={() =>
+                                            handleResolverExcedente(exc.id, 'CONVERTER_CREDITO')
+                                          }
+                                          className="min-h-[44px] flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors disabled:opacity-50"
+                                        >
+                                          💳 Guardar como Crédito
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                              </div>
+                            )}
 
                           {/* Botão Entregar Todos Disponíveis (FR-027, FR-031) */}
                           {temItensParaEntregar && (
@@ -664,6 +923,77 @@ export function ClienteFichaModal({
                                   </div>
                                 );
                               })}
+                            </div>
+                          )}
+
+                          {/* Histórico de Pagamentos da Conta (Story 5.2 & 5.3) */}
+                          {conta.pagamentos && conta.pagamentos.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-border-hairline">
+                              <span className="text-[11px] font-bold text-ink-secondary uppercase tracking-wider block mb-1">
+                                Histórico de Pagamentos ({conta.pagamentos.length})
+                              </span>
+                              <div className="flex flex-col gap-1.5 divide-y divide-border-hairline/40">
+                                {conta.pagamentos.map((pag) => {
+                                  const isEstornado = pag.status === 'ESTORNADO';
+                                  return (
+                                    <div
+                                      key={pag.id}
+                                      className={`pt-1.5 flex items-center justify-between gap-2 text-xs ${
+                                        isEstornado ? 'opacity-60' : ''
+                                      }`}
+                                    >
+                                      <div>
+                                        <div className="flex items-center gap-1.5 font-semibold text-ink-primary">
+                                          <span className={isEstornado ? 'line-through text-ink-muted' : ''}>
+                                            {formatarMoeda(pag.valor_pago_centavos)}
+                                          </span>
+                                          <span className="px-1.5 py-0.5 rounded text-[10px] bg-surface-raised border font-mono">
+                                            {pag.forma_pagamento}
+                                          </span>
+                                          {isEstornado && (
+                                            <span className="text-[10px] text-red-600 font-bold bg-red-50 px-1.5 py-0.5 rounded">
+                                              ESTORNADO
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-[11px] text-ink-secondary mt-0.5">
+                                          <span>
+                                            {new Date(pag.data_pagamento).toLocaleDateString('pt-BR')}
+                                          </span>
+                                          {pag.taxa_cartao_centavos > 0 && (
+                                            <span>
+                                              {' '}• Taxa absorvida: {formatarMoeda(pag.taxa_cartao_centavos)} (Líquido:{' '}
+                                              {formatarMoeda(pag.valor_liquido_centavos)})
+                                            </span>
+                                          )}
+                                          {isEstornado && pag.motivo_estorno && (
+                                            <span className="block text-red-600 italic">
+                                              Motivo: {pag.motivo_estorno}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {!isEstornado && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setPagamentoParaEstornar({
+                                              id: pag.id,
+                                              valor: pag.valor_pago_centavos
+                                            });
+                                            setMotivoEstorno('');
+                                          }}
+                                          className="min-h-[44px] px-2.5 py-1 text-xs text-red-600 hover:bg-red-50 rounded-lg border border-red-200 transition-colors font-medium flex items-center gap-1"
+                                        >
+                                          <span>↩️</span>
+                                          <span>Estornar</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -868,6 +1198,187 @@ export function ClienteFichaModal({
                   className="min-h-[48px] px-5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-body-md shadow-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {cancelandoItem ? 'Cancelando...' : 'Confirmar Cancelamento'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Sobreposto para Registrar Pagamento (Story 5.2, FR-034, FR-035) */}
+      {contaParaPagar && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Registrar Pagamento"
+          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-ink-primary/60 backdrop-blur-xs"
+        >
+          <div className="w-full max-w-md bg-surface-raised rounded-xl p-5 shadow-2xl border border-border-hairline flex flex-col gap-3">
+            <h3 className="text-title-md font-bold text-ink-primary flex items-center gap-2">
+              <span>💰</span>
+              <span>Registrar Pagamento da Compra</span>
+            </h3>
+            <p className="text-meta text-ink-secondary">
+              Saldo total devedor em aberto:{' '}
+              <strong className="text-ink-primary">
+                {formatarMoeda(contaParaPagar.valor_total - contaParaPagar.total_pago)}
+              </strong>
+            </p>
+
+            <form onSubmit={handleRegistrarPagamento} className="flex flex-col gap-3">
+              <div>
+                <label htmlFor="valorPagamento" className="block text-meta font-bold text-ink-primary mb-1">
+                  Valor a pagar (R$):
+                </label>
+                <input
+                  id="valorPagamento"
+                  type="text"
+                  required
+                  value={valorPagamento}
+                  onChange={(e) => setValorPagamento(e.target.value)}
+                  placeholder="0,00"
+                  className="w-full p-2.5 rounded-lg border border-border-hairline bg-surface-sunken text-title-md font-bold text-ink-primary focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-meta font-bold text-ink-primary mb-1">
+                  Forma de Pagamento:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['PIX', 'DINHEIRO', 'CARTAO'] as const).map((forma) => (
+                    <button
+                      key={forma}
+                      type="button"
+                      onClick={() => setFormaPagamento(forma)}
+                      className={`min-h-[44px] px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
+                        formaPagamento === forma
+                          ? 'bg-brand-primary text-white border-brand-primary'
+                          : 'bg-surface-raised text-ink-secondary border-border-hairline hover:bg-surface-sunken'
+                      }`}
+                    >
+                      {forma === 'PIX' ? '⚡ Pix' : forma === 'DINHEIRO' ? '💵 Dinheiro' : '💳 Cartão'}
+                    </button>
+                  ))}
+                  {ficha && ficha.saldo_credito_centavos > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setFormaPagamento('CREDITO_CARTEIRA')}
+                      className={`min-h-[44px] px-3 py-2 rounded-lg text-xs font-bold border transition-colors col-span-2 ${
+                        formaPagamento === 'CREDITO_CARTEIRA'
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                      }`}
+                    >
+                      🎁 Crédito em Carteira ({formatarMoeda(ficha.saldo_credito_centavos)})
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {formaPagamento === 'CARTAO' && (
+                <div>
+                  <label htmlFor="taxaCartao" className="block text-meta font-bold text-ink-primary mb-1">
+                    Taxa da Maquininha (R$) - Absorvida por você (FR-035):
+                  </label>
+                  <input
+                    id="taxaCartao"
+                    type="text"
+                    value={taxaCartao}
+                    onChange={(e) => setTaxaCartao(e.target.value)}
+                    placeholder="0,00"
+                    className="w-full p-2.5 rounded-lg border border-border-hairline bg-surface-sunken text-body-md text-ink-primary focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                  />
+                  <span className="text-[11px] text-ink-secondary mt-0.5 block">
+                    A cliente recebe o abatimento integral; a taxa abate apenas o seu saldo líquido.
+                  </span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={salvandoPagamento}
+                  onClick={() => {
+                    setContaParaPagar(null);
+                    setValorPagamento('');
+                    setTaxaCartao('');
+                  }}
+                  className="min-h-[48px] px-4 rounded-lg text-ink-secondary hover:bg-surface-sunken font-semibold text-body-md"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={salvandoPagamento || !valorPagamento.trim()}
+                  className="min-h-[48px] px-5 bg-brand-primary hover:bg-brand-hover text-white font-bold rounded-lg text-body-md shadow-sm transition-colors disabled:opacity-50"
+                >
+                  {salvandoPagamento ? 'Registrando...' : 'Confirmar Pagamento'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Sobreposto para Estorno de Pagamento (Story 5.3, FR-037) */}
+      {pagamentoParaEstornar && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirmar Estorno de Pagamento"
+          className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-ink-primary/60 backdrop-blur-xs"
+        >
+          <div className="w-full max-w-md bg-surface-raised rounded-xl p-5 shadow-2xl border border-status-alert/30 flex flex-col gap-3">
+            <h3 className="text-title-md font-bold text-status-alert flex items-center gap-2">
+              <span>⚠️</span>
+              <span>Estornar Pagamento</span>
+            </h3>
+            <p className="text-body-md text-ink-secondary">
+              Você está estornando o pagamento de{' '}
+              <strong className="text-ink-primary">
+                {formatarMoeda(pagamentoParaEstornar.valor)}
+              </strong>
+              .
+            </p>
+            <p className="text-meta text-ink-secondary">
+              O saldo devedor da conta será reaberto imediatamente e o histórico de auditoria ficará registrado.
+            </p>
+
+            <form onSubmit={handleEstornarPagamento} className="flex flex-col gap-3">
+              <div>
+                <label htmlFor="motivoEstorno" className="block text-meta font-bold text-ink-primary mb-1">
+                  Motivo da justificativa do estorno (obrigatório):
+                </label>
+                <textarea
+                  id="motivoEstorno"
+                  required
+                  rows={3}
+                  value={motivoEstorno}
+                  onChange={(e) => setMotivoEstorno(e.target.value)}
+                  placeholder="Ex: Pagamento lançado em conta errada, comprovante Pix falso..."
+                  className="w-full p-2.5 rounded-lg border border-border-hairline bg-surface-sunken text-body-md text-ink-primary focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={estornandoPagamento}
+                  onClick={() => {
+                    setPagamentoParaEstornar(null);
+                    setMotivoEstorno('');
+                  }}
+                  className="min-h-[48px] px-4 rounded-lg text-ink-secondary hover:bg-surface-sunken font-semibold text-body-md"
+                >
+                  Voltar
+                </button>
+                <button
+                  type="submit"
+                  disabled={estornandoPagamento || !motivoEstorno.trim()}
+                  className="min-h-[48px] px-5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-body-md shadow-sm transition-colors disabled:opacity-50"
+                >
+                  {estornandoPagamento ? 'Estornando...' : 'Confirmar Estorno'}
                 </button>
               </div>
             </form>

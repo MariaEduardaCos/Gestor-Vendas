@@ -363,41 +363,6 @@ export const vendasRoutes: FastifyPluginAsync = async (fastify) => {
     }
   );
 
-  // GET /api/contas/:id - Detalhes de uma conta específica
-  fastify.get<{ Params: { id: string } }>(
-    '/api/contas/:id',
-    { preHandler: fastify.requireSession },
-    async (request, reply) => {
-      const { id } = request.params;
-      const session = request.session!;
-
-      const conta = await request.tenantPrisma.conta.findFirst({
-        where: {
-          id: id.trim(),
-          operacao_id: session.operacaoId
-        },
-        include: {
-          cliente: true,
-          itens: {
-            include: {
-              produto: true
-            }
-          }
-        }
-      });
-
-      if (!conta) {
-        return reply.status(404).type('application/problem+json').send(
-          createProblemDetails(404, 'CONTA_NAO_ENCONTRADA', 'Conta Não Encontrada', 'A conta solicitada não existe nesta operação.')
-        );
-      }
-
-      return reply.send({
-        ...conta,
-        status_entrega: calcularStatusEntregaConta(conta.itens)
-      });
-    }
-  );
 
   // POST /api/contas/:id/itens/:itemId/entregar - Confirmação de entrega física de item individual (FR-027, FR-028, FR-031, AD-3, NFR-001)
   fastify.post<{ Params: { id: string; itemId: string } }>(
@@ -851,6 +816,22 @@ export const vendasRoutes: FastifyPluginAsync = async (fastify) => {
           let excedenteCentavos = 0;
           if (itemConta.conta.total_pago > novoValorTotal) {
             excedenteCentavos = itemConta.conta.total_pago - novoValorTotal;
+
+            await tx.excedentePendente.create({
+              data: {
+                id: gerarUuidV7(),
+                operacao_id: session.operacaoId,
+                conta_id: id,
+                cliente_id: itemConta.conta.cliente_id,
+                valor_centavos: excedenteCentavos,
+                origem: 'CANCELAMENTO_ITEM',
+                status: 'PENDENTE',
+                operador_id: session.operadorId,
+                operador_nome: session.operadorNome,
+                criado_em: new Date()
+              }
+            });
+
             await tx.registroAuditoria.create({
               data: {
                 id: gerarUuidV7(),

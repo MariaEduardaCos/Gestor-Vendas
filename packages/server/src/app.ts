@@ -14,6 +14,7 @@ import { pareamentoRoutes } from './routes/pareamento.js';
 import { encomendasRoutes } from './routes/encomendas.js';
 import { comprasRoutes } from './routes/compras.js';
 import { vendasRoutes } from './routes/vendas.js';
+import { contasRoutes } from './routes/contas.js';
 
 export interface BuildAppOptions {
   prisma?: PrismaClient;
@@ -50,6 +51,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(encomendasRoutes);
   app.register(comprasRoutes);
   app.register(vendasRoutes);
+  app.register(contasRoutes);
 
   // Global Error Handler conforme RFC 7807
   app.setErrorHandler((error: FastifyError | Error, request, reply) => {

@@ -155,6 +155,12 @@ export const clientesRoutes: FastifyPluginAsync = async (fastify) => {
             include: {
               itens: {
                 include: { produto: true }
+              },
+              pagamentos: {
+                orderBy: { criado_em: 'desc' }
+              },
+              excedentes: {
+                orderBy: { criado_em: 'desc' }
               }
             }
           },
@@ -216,6 +222,29 @@ export const clientesRoutes: FastifyPluginAsync = async (fastify) => {
               custo_unitario_centavos: i.custo_unitario_centavos,
               origem_custo: i.origem_custo,
               status_entrega: i.status_entrega
+            })),
+            pagamentos: (c.pagamentos || []).map((p: any) => ({
+              id: p.id,
+              valor_pago_centavos: p.valor_pago_centavos,
+              taxa_cartao_centavos: p.taxa_cartao_centavos,
+              valor_liquido_centavos: p.valor_liquido_centavos,
+              forma_pagamento: p.forma_pagamento,
+              status: p.status,
+              motivo_estorno: p.motivo_estorno,
+              data_pagamento: p.data_pagamento.toISOString(),
+              criado_em: p.criado_em.toISOString(),
+              operador_nome: p.operador_nome
+            })),
+            excedentes: (c.excedentes || []).map((e: any) => ({
+              id: e.id,
+              conta_id: e.conta_id,
+              cliente_id: e.cliente_id,
+              valor_centavos: e.valor_centavos,
+              origem: e.origem,
+              status: e.status,
+              resolvido_em: e.resolvido_em ? e.resolvido_em.toISOString() : null,
+              motivo_resolucao: e.motivo_resolucao,
+              criado_em: e.criado_em.toISOString()
             }))
           };
         }),

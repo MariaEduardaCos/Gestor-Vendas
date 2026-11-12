@@ -9,6 +9,7 @@ import { EncomendaModal } from './components/EncomendaModal';
 import { CompraMarcaModal } from './components/CompraMarcaModal';
 import { ConferenciaCaixaModal } from './components/ConferenciaCaixaModal';
 import { VendaModal } from './components/VendaModal';
+import { ResumoFinanceiroModal } from './components/ResumoFinanceiroModal';
 import type { ClienteDTO } from './types/cliente';
 
 export function App() {
@@ -40,6 +41,7 @@ export function App() {
   const [conferenciaModalAberta, setConferenciaModalAberta] = useState(false);
   const [conferenciaCompraId, setConferenciaCompraId] = useState<string | null>(null);
   const [vendaModalAberta, setVendaModalAberta] = useState(false);
+  const [resumoFinanceiroModalAberta, setResumoFinanceiroModalAberta] = useState(false);
   const [refreshEstoqueKey, setRefreshEstoqueKey] = useState(0);
   const [clienteRecemCriado, setClienteRecemCriado] = useState<ClienteDTO | null>(null);
   const [clienteSelecionadoFluxo, setClienteSelecionadoFluxo] = useState<ClienteDTO | null>(null);
@@ -96,6 +98,15 @@ export function App() {
             <p className="text-meta text-ink-secondary">{operacaoNome}</p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setResumoFinanceiroModalAberta(true)}
+              className="text-meta font-bold bg-brand-subtle text-brand-primary hover:bg-brand-primary hover:text-white px-2.5 py-1.5 rounded flex items-center gap-1 transition-colors"
+              title="Abrir Resumo Financeiro Consolidado"
+            >
+              <span>📊</span>
+              <span>Financeiro</span>
+            </button>
             <span className="w-2.5 h-2.5 rounded-full bg-status-available animate-pulse" />
             <span className="text-label-strong text-ink-primary">{operadorNome}</span>
           </div>
@@ -271,6 +282,29 @@ export function App() {
                 className="min-h-touch-target bg-status-available hover:opacity-90 text-white font-bold text-label-strong rounded-md flex items-center justify-center gap-2 shadow-sm transition-all"
               >
                 <span>🛍️</span> Nova Venda de Pronta-Entrega (S8)
+              </button>
+            </div>
+
+            {/* Painel Consolidado de Fechamento e Finanças (Story 5.5, UX-DR9) */}
+            <div className="bg-surface-raised border-2 border-brand-primary/60 rounded-lg p-5 shadow-sm flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-title-md font-bold text-ink-primary">
+                  Painel de Finanças & Fechamento
+                </h3>
+                <span className="text-meta font-bold bg-brand-primary text-white px-2.5 py-1 rounded">
+                  Story 5.5
+                </span>
+              </div>
+              <p className="text-body-md text-ink-secondary">
+                Visão segregada do seu negócio: faturamento total, valores recebidos brutos vs líquidos (taxas absorvidas), contas a receber e créditos ativos.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setResumoFinanceiroModalAberta(true)}
+                className="min-h-touch-target bg-brand-primary hover:bg-brand-hover text-white font-bold text-label-strong rounded-md flex items-center justify-center gap-2 shadow-sm transition-all"
+              >
+                <span>📊</span> Ver Resumo Financeiro Consolidado
               </button>
             </div>
 
@@ -525,6 +559,13 @@ export function App() {
           setMensagemSucesso(`Venda confirmada para ${resultado.conta.cliente_nome}! Total: ${totalFormatado}`);
           setTimeout(() => setMensagemSucesso(null), 6000);
         }}
+      />
+
+      {/* Modal de Resumo Financeiro e Fechamento Segregado (Story 5.5, UX-DR9) */}
+      <ResumoFinanceiroModal
+        isOpen={resumoFinanceiroModalAberta}
+        sessionToken={sessionToken || undefined}
+        onClose={() => setResumoFinanceiroModalAberta(false)}
       />
     </div>
   );
