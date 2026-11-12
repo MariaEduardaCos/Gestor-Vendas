@@ -1,4 +1,5 @@
 import { FastifyPluginAsync } from 'fastify';
+import { resumoCobrancaDaConta } from './cobranca.js';
 import {
   createProblemDetails,
   DomainError,
@@ -44,7 +45,8 @@ export const contasRoutes: FastifyPluginAsync = async (fastify) => {
           },
           excedentes: {
             orderBy: { criado_em: 'desc' }
-          }
+          },
+          parcelas: { orderBy: { numero: 'asc' } }
         }
       });
 
@@ -83,6 +85,7 @@ export const contasRoutes: FastifyPluginAsync = async (fastify) => {
         saldo_cobravel_hoje_formatado: Centavos.deInteiro(saldoCobravelHoje).paraFormatado(),
         status: conta.status,
         status_entrega_consolidado: calcularStatusEntregaConta(conta.itens),
+        cobranca: resumoCobrancaDaConta(conta, conta.parcelas),
         criado_em: conta.criado_em.toISOString(),
         itens: conta.itens.map((i: any) => ({
           id: i.id,

@@ -28,6 +28,7 @@ model Operacao {
   registros_idempotencia RegistroIdempotencia[]
   pagamentos_conta PagamentoConta[]
   excedentes_pendentes ExcedentePendente[]
+  parcelas_conta   ParcelaConta[]
 
   @@map("operacoes")
 }
@@ -115,6 +116,7 @@ model Conta {
   itens      ItemConta[]
   pagamentos PagamentoConta[]
   excedentes ExcedentePendente[]
+  parcelas   ParcelaConta[]
 
   @@index([operacao_id])
   @@index([cliente_id])
@@ -388,3 +390,43 @@ model ExcedentePendente {
 
 
 
+
+/// Vencimentos da conta (FR-036). Guarda só a data: o valor de cada parcela é
+/// o total atual da conta dividido igualmente (regra em core/domain/cobranca.ts).
+model ParcelaConta {
+  id          String   @id
+  operacao_id String
+  conta_id    String
+  numero      Int
+  vencimento  String   // AAAA-MM-DD
+  criado_em   DateTime @default(now())
+
+  operacao Operacao @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+  conta    Conta    @relation(fields: [conta_id], references: [id], onDelete: Cascade)
+
+  @@unique([conta_id, numero])
+  @@index([operacao_id, vencimento])
+  @@map("parcelas_conta")
+}
+
+/// Catálogo compartilhado entre revendedoras (sem operacao_id, de propósito).
+/// Guarda SÓ dados públicos de revista: marca, nome, variante, código e preço sugerido.
+/// Nunca clientes, quantidades, custos ou quem contribuiu. Alimentado quando uma
+/// revendedora salva o catálogo do ciclo com "compartilhar" marcado.
+model ProdutoReferencia {
+  id                      String   @id
+  marca_chave             String   // nome da marca normalizado (sem acento/maiúscula)
+  marca_nome              String
+  chave                   String   // código de barras ou nome|variante normalizados
+  nome                    String
+  variante                String?
+  codigo_barras           String?
+  preco_sugerido_centavos Int
+  ciclo                   String
+  contribuicoes           Int      @default(1)
+  atualizado_em           DateTime @updatedAt
+
+  @@unique([marca_chave, chave])
+  @@index([codigo_barras])
+  @@map("produtos_referencia")
+}

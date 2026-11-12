@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import {
   Marca,
   gerarUuidV7,
+  normalizarTexto,
   createProblemDetails
 } from '@consultorasync/core';
 
@@ -93,8 +94,18 @@ export const marcasRoutes: FastifyPluginAsync = async (fastify) => {
         include: { _count: { select: { produtos: true } } }
       });
 
+      // Quantos produtos o catálogo compartilhado tem para cada marca (tabela global, sem dados da operação)
+      const chaves = marcas.map((m) => normalizarTexto(m.nome));
+      const contagens = await fastify.prisma.produtoReferencia.groupBy({
+        by: ['marca_chave'],
+        where: { marca_chave: { in: chaves } },
+        _count: { _all: true }
+      });
+      const porChave = new Map(contagens.map((c) => [c.marca_chave, c._count._all]));
+
       return reply.status(200).send(
         marcas.map((m) => ({
+          catalogo_compartilhado_quantidade: porChave.get(normalizarTexto(m.nome)) ?? 0,
           id: m.id,
           operacao_id: m.operacao_id,
           nome: m.nome,

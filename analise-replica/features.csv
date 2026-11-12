@@ -1,0 +1,37 @@
+feature,area,priority,original,clone,notes
+Cadastro de clientes e ficha com histórico,clientes,must,MR+RO,yes,
+Cadastro de produto com variante e preço,produtos,must,MR+RO,yes,
+Leitura de código de barras pela câmera,produtos,must,MR,yes,Também na venda e na encomenda; código desconhecido sugere produto do catálogo compartilhado; celular pareado (HTTPS em dev:celular)
+Catálogo de marcas para cadastro rápido,produtos,must,MR+RO,partial,Catálogo compartilhado entre revendedoras (colaborativo) + importação do ciclo; sem catálogo oficial das marcas
+Comissão/percentual por marca,produtos,must,MR,yes,Custo estimado pelo percentual da marca
+Controle de estoque com baixa na venda,estoque,must,MR+RO,yes,Separa em casa / reservado / pronta-entrega / a chegar
+Registro de venda,vendas,must,MR+RO,yes,
+Pendências e saldo por cliente (fiado),cobranca,must,MR,yes,Contas separadas por compra
+Pagamento parcial (Pix/dinheiro/cartão),cobranca,must,MR,yes,
+Relatório financeiro (recebido/a receber),financeiro,must,MR+RO,partial,Resumo financeiro sem gráficos nem período
+Uso no celular e no computador,plataforma,must,MR+RO,yes,Web responsiva
+Login individual e acesso por função,plataforma,must,RO,no,Sessão de desenvolvimento automática; login com PIN pendente
+Encomenda por cliente ligada ao pedido à marca,pedidos,must,nenhum,yes,Diferencial: concorrentes não comunicam
+Conferência da caixa recebida e falta da marca,pedidos,must,nenhum,yes,Diferencial
+Controle de validade e lotes,estoque,should,MR,no,Dor do briefing; recurso esperado na categoria
+Alerta de pagamentos atrasados,cobranca,should,MR,yes,Vencimento único ou parcelado; situação Atrasada com dias e valor vencido; filtros e painel Hoje
+Gerar Pix na venda,cobranca,should,MR,no,BR Code estático é viável sem banco
+Importar compra por NF-e (XML/chave),compras,should,MR,no,Planejado em branch feat/nota-fiscal
+Importar produtos por planilha,produtos,should,MR,partial,Catálogo aceita lista colada e .csv/.txt
+Estorno de pagamento e crédito da cliente,cobranca,should,nenhum,yes,
+Desfazer/cancelar venda,vendas,should,MR,yes,Cancelamento de item com liberação de reserva
+Relatórios de lucratividade por período,relatorios,should,MR+RO,no,
+Exportação de dados (CSV),relatorios,should,MR+RO,no,
+Despesas e bônus no financeiro,financeiro,should,MR+RO,no,
+Mensagens e lembretes por WhatsApp,comunicacao,could,MR+RO,partial,Botão Cobrar abre o WhatsApp com mensagem pronta (link wa.me); sem envio automático
+Loja online/vitrine com pedidos,vendas,could,MR+RO,no,Fora do escopo T1
+Agenda de compromissos,rotina,could,RO,no,
+Metas de vendas e contatos,rotina,could,RO,no,
+Pós-venda 2+2+2 e datas importantes,clientes,could,RO,no,
+Programa de fidelidade,clientes,could,MR,no,
+Trocas entre consultoras,estoque,could,RO,no,
+Catálogo em PDF para divulgação,divulgacao,could,MR,no,
+Catálogos e fotos prontos das marcas,conteudo,skip,MR+RO,skip,Dados dos concorrentes/direitos das marcas
+Comunidade com videoaulas e artes,conteudo,skip,RO,skip,Conteúdo e relacionamento não são software
+Mentorias com contador,conteudo,skip,MR,skip,Serviço humano
+Integração oficial WhatsApp Business API,comunicacao,skip,MR+RO,skip,Exige aprovação da Meta e custo por mensagem

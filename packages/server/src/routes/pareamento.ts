@@ -1,3 +1,4 @@
+import { networkInterfaces } from 'node:os';
 import type { FastifyPluginAsync } from 'fastify';
 import { createProblemDetails, type TipoPontaPareamento } from '@consultorasync/core';
 import { pareamentoHub } from '../infrastructure/pareamentoHub.js';
@@ -41,22 +42,7 @@ export const pareamentoRoutes: FastifyPluginAsync = async (fastify) => {
         ttlMs
       );
 
-      // Constrói URL de pareamento para exibição no QR Code usando origin/referer ou host
-      let baseOrigin = process.env.APP_BASE_URL;
-      if (!baseOrigin) {
-        if (request.headers.origin) {
-          baseOrigin = request.headers.origin;
-        } else if (request.headers.referer) {
-          try {
-            baseOrigin = new URL(request.headers.referer).origin;
-          } catch {}
-        }
-      }
-      if (!baseOrigin) {
-        const host = request.headers['x-forwarded-host'] || request.headers.host || 'localhost:5173';
-        const proto = request.headers['x-forwarded-proto'] || (request.protocol ?? 'http');
-        baseOrigin = `${proto}://${host}`;
-      }
+      const baseOrigin = origemParaCelular(request);
       const urlPareamento = `${baseOrigin}/?leitor_token=${encodeURIComponent(sessaoDto.token)}`;
 
       return reply.status(201).send({
@@ -89,21 +75,7 @@ export const pareamentoRoutes: FastifyPluginAsync = async (fastify) => {
         ttlMs
       );
 
-      let baseOrigin = process.env.APP_BASE_URL;
-      if (!baseOrigin) {
-        if (request.headers.origin) {
-          baseOrigin = request.headers.origin;
-        } else if (request.headers.referer) {
-          try {
-            baseOrigin = new URL(request.headers.referer).origin;
-          } catch {}
-        }
-      }
-      if (!baseOrigin) {
-        const host = request.headers['x-forwarded-host'] || request.headers.host || 'localhost:5173';
-        const proto = request.headers['x-forwarded-proto'] || (request.protocol ?? 'http');
-        baseOrigin = `${proto}://${host}`;
-      }
+      const baseOrigin = origemParaCelular(request);
       const urlPareamento = `${baseOrigin}/?leitor_token=${encodeURIComponent(sessaoDto.token)}`;
 
       return reply.status(200).send({
@@ -163,3 +135,38 @@ export const pareamentoRoutes: FastifyPluginAsync = async (fastify) => {
     }
   );
 };
+
+/**
+ * Origem que o CELULAR consegue abrir. Se o computador acessou por localhost,
+ * troca pelo IP do computador na rede local (o celular não alcança "localhost").
+ * APP_BASE_URL, se definida, tem prioridade (ex.: endereço publicado).
+ */
+export function origemParaCelular(request: { headers: Record<string, unknown>; protocol?: string }): string {
+  if (process.env.APP_BASE_URL) return process.env.APP_BASE_URL;
+  const h = request.headers as Record<string, string | undefined>;
+  let origem: string | undefined = h.origin;
+  if (!origem && h.referer) {
+    try {
+      origem = new URL(h.referer).origin;
+    } catch {
+      /* referer inválido */
+    }
+  }
+  if (!origem) origem = `${h['x-forwarded-proto'] || request.protocol || 'http'}://${h['x-forwarded-host'] || h.host || 'localhost:3000'}`;
+
+  const url = new URL(origem);
+  if (['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) {
+    const ip = ipDaRedeLocal();
+    if (ip) url.hostname = ip;
+  }
+  return url.origin;
+}
+
+function ipDaRedeLocal(): string | null {
+  for (const interfaces of Object.values(networkInterfaces())) {
+    for (const i of interfaces ?? []) {
+      if (i.family === 'IPv4' && !i.internal) return i.address;
+    }
+  }
+  return null;
+}

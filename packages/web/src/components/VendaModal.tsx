@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { BipadorProdutos } from '../app/leitura/BipadorProdutos';
+import { CampoVencimento, VENCIMENTO_VAZIO, vencimentoIncompleto, vencimentoParaPayload, type ValorVencimento } from '../app/cobranca/CampoVencimento';
 import type { ProdutoDTO } from '../types/produto';
 import type { EstoqueDTO } from '../types/estoque';
 
@@ -45,6 +47,7 @@ export function VendaModal({
   const [itens, setItens] = useState<ItemSelecionado[]>([]);
   const [entregaImediata, setEntregaImediata] = useState(false);
   const [observacoes, setObservacoes] = useState('');
+  const [vencimento, setVencimento] = useState<ValorVencimento>(VENCIMENTO_VAZIO);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -74,6 +77,7 @@ export function VendaModal({
       setErro(null);
       setTermoBuscaProduto('');
       setObservacoes('');
+      setVencimento(VENCIMENTO_VAZIO);
       setEntregaImediata(false);
       setClienteSelecionadoId(clientePreSelecionado ? clientePreSelecionado.id : '');
       carregarDadosIniciais();
@@ -221,6 +225,12 @@ export function VendaModal({
       return;
     }
 
+    const problemaVencimento = vencimentoIncompleto(vencimento);
+    if (problemaVencimento) {
+      setErro(problemaVencimento);
+      return;
+    }
+
     setSalvando(true);
     try {
       const headers: Record<string, string> = {
@@ -238,6 +248,7 @@ export function VendaModal({
         cliente_id: clienteSelecionadoId,
         idempotency_key: idempotencyKey,
         observacoes: observacoes.trim() || null,
+        ...vencimentoParaPayload(vencimento),
         itens: itens.map((it) => ({
           produto_id: it.produto.id,
           quantidade: it.quantidade,
@@ -402,6 +413,15 @@ export function VendaModal({
               </span>
             </div>
 
+            <BipadorProdutos
+              produtos={produtosCatalogo}
+              onProduto={handleAdicionarProduto}
+              onProdutoCadastrado={(prod) => {
+                setProdutosCatalogo((atuais) => [...atuais, prod]);
+                setErro(`"${prod.nome}" foi cadastrado, mas ainda não tem unidades na pronta-entrega. Lance o estoque para vender.`);
+              }}
+            />
+
             {/* Campo de Busca Rápida */}
             <div className="relative mb-3">
               <input
@@ -538,6 +558,13 @@ export function VendaModal({
               </div>
             </div>
           )}
+
+          {/* Vencimento / parcelamento (FR-036) */}
+          <CampoVencimento
+            valor={vencimento}
+            onChange={setVencimento}
+            totalCentavos={itens.reduce((s, it) => s + it.quantidade * it.produto.preco_venda_centavos, 0)}
+          />
 
           {/* 5. Observações Opcionais */}
           <div>

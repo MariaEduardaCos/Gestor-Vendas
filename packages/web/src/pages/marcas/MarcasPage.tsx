@@ -13,6 +13,7 @@ export interface MarcaDTO {
   catalogo_ciclo: string | null;
   catalogo_atualizado_em: string | null;
   quantidade_produtos: number;
+  catalogo_compartilhado_quantidade: number;
 }
 
 interface Escolha {
@@ -103,6 +104,11 @@ export function MarcasPage() {
                   : 'Nenhum catálogo carregado'}{' '}
                 · {m.quantidade_produtos} produto(s)
               </p>
+              {m.catalogo_compartilhado_quantidade > 0 && m.quantidade_produtos === 0 && (
+                <p className="text-meta text-status-available font-semibold">
+                  {m.catalogo_compartilhado_quantidade} produtos disponíveis no catálogo compartilhado
+                </p>
+              )}
               <button
                 type="button"
                 onClick={() => setCatalogoDe(m)}

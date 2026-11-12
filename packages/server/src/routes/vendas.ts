@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { lerVencimentos, resumoCobrancaDaConta } from './cobranca.js';
 import {
   gerarUuidV7,
   createProblemDetails,
@@ -19,6 +20,10 @@ interface CriarVendaBody {
   itens: ItemVendaInput[];
   idempotency_key?: string;
   observacoes?: string | null;
+  /** Vencimentos (AAAA-MM-DD) ou primeiro vencimento + parcelas mensais. Opcional (FR-036). */
+  vencimentos?: string[];
+  primeiro_vencimento?: string;
+  parcelas?: number;
 }
 
 export const vendasRoutes: FastifyPluginAsync = async (fastify) => {
@@ -47,6 +52,16 @@ export const vendasRoutes: FastifyPluginAsync = async (fastify) => {
             // Em caso de falha de parse, segue fluxo
           }
         }
+      }
+
+      // Vencimentos opcionais, validados antes de mexer no estoque
+      let vencimentosVenda: string[] = [];
+      try {
+        vencimentosVenda = lerVencimentos(request.body) ?? [];
+      } catch (e) {
+        return reply.status(400).type('application/problem+json').send(
+          createProblemDetails(400, 'VENCIMENTO_INVALIDO', 'Vencimento inválido', (e as Error).message)
+        );
       }
 
       // 2. Validação da cliente (FR-002, AD-1)
@@ -237,6 +252,12 @@ export const vendasRoutes: FastifyPluginAsync = async (fastify) => {
             }
           });
 
+          for (const [i, vencimento] of vencimentosVenda.entries()) {
+            await tx.parcelaConta.create({
+              data: { id: gerarUuidV7(), operacao_id: session.operacaoId, conta_id: contaId, numero: i + 1, vencimento }
+            });
+          }
+
           // Criação dos itens da conta
           const itensCriados = [];
           for (const itemProc of itensProcessados) {
@@ -349,14 +370,16 @@ export const vendasRoutes: FastifyPluginAsync = async (fastify) => {
                 select: { id: true, nome: true, variante: true, codigo_barras: true }
               }
             }
-          }
+          },
+          parcelas: { orderBy: { numero: 'asc' } }
         },
         orderBy: { criado_em: 'desc' }
       });
 
       const contasComStatus = contas.map((c: any) => ({
         ...c,
-        status_entrega: calcularStatusEntregaConta(c.itens)
+        status_entrega: calcularStatusEntregaConta(c.itens),
+        cobranca: resumoCobrancaDaConta(c, c.parcelas)
       }));
 
       return reply.send(contasComStatus);

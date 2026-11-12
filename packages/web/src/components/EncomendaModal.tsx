@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { BipadorProdutos } from '../app/leitura/BipadorProdutos';
 import type { ProdutoDTO } from '../types/produto';
 
 interface EncomendaModalProps {
@@ -327,6 +328,14 @@ export function EncomendaModal({
             <label htmlFor="busca-produto-encomenda" className="block text-label-strong font-bold text-ink-primary mb-1.5">
               Escolher Produtos do Catálogo
             </label>
+            <BipadorProdutos
+              produtos={produtosCatalogo}
+              onProduto={handleAdicionarProduto}
+              onProdutoCadastrado={(prod) => {
+                setProdutosCatalogo((atuais) => [...atuais, prod]);
+                handleAdicionarProduto(prod);
+              }}
+            />
             {marcasDoCatalogo.length > 1 && (
               <div className="flex gap-1.5 overflow-x-auto pb-2" role="group" aria-label="Filtrar por marca">
                 {[null, ...marcasDoCatalogo].map((m) => (

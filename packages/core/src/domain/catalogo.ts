@@ -153,3 +153,8 @@ export function planejarImportacaoCatalogo(existentes: ProdutoCatalogoExistente[
     return { tipo: 'SEM_MUDANCA', linha, produtoId: produto.id };
   });
 }
+
+/** Chave estável do produto no catálogo compartilhado: o código, ou nome|variante normalizados. */
+export function chaveProdutoCatalogo(linha: Pick<LinhaCatalogo, 'codigoBarras' | 'nome' | 'variante'>): string {
+  return linha.codigoBarras ? `cod:${linha.codigoBarras}` : `nome:${chaveNome(linha.nome, linha.variante)}`;
+}

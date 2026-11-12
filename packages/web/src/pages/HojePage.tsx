@@ -4,6 +4,7 @@ import { useApiGet, formatarReais, formatarData, diasDesde } from '../lib/api';
 import { useAcoes } from '../app/AcoesContext';
 import { useSessao } from '../app/SessaoContext';
 import { Cartao, Indicador, Situacao } from '../layout/ui';
+import { BotaoCobrar, DescricaoVencimento } from '../app/cobranca/acoes';
 import { Icone, type NomeIcone } from '../layout/Icone';
 import { saldoConta, resumoItens, type CompraListagem, type ContaListagem, type EstoqueLinha } from '../types/gestao';
 
@@ -23,7 +24,12 @@ export function HojePage() {
   const paraEntregar = listaContas.filter((c) => c.itens.some((i) => i.status_entrega === 'RESERVADO_PRESENTE'));
   const pedidosAbertos = (compras.dados ?? []).filter((c) => c.status === 'PEDIDO_REGISTRADO' || c.status === 'CONFERENCIA_EM_ANDAMENTO');
   const semProntaEntrega = (estoque.dados ?? []).filter((e) => e.pronta_entrega === 0 && e.aguardando_fabrica === 0);
-  const contasAntigas = [...emAberto].sort((a, b) => a.criado_em.localeCompare(b.criado_em)).slice(0, 5);
+  const atrasadas = emAberto
+    .filter((c) => c.cobranca.situacao === 'ATRASADA')
+    .sort((a, b) => b.cobranca.dias_atraso - a.cobranca.dias_atraso);
+  const totalAtrasado = atrasadas.reduce((s, c) => s + c.cobranca.valor_vencido_centavos, 0);
+  // Sem atrasos, mostra as contas abertas há mais tempo (inclusive as sem vencimento).
+  const contasParaCobrar = (atrasadas.length ? atrasadas : [...emAberto].sort((a, b) => a.criado_em.localeCompare(b.criado_em))).slice(0, 5);
 
   const primeiroNome = sessao?.operador_nome;
 
@@ -60,7 +66,13 @@ export function HojePage() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Indicador rotulo="A receber" valor={formatarReais(totalAReceber)} detalhe={`${emAberto.length} contas em aberto`} tom={totalAReceber > 0 ? 'alerta' : 'ok'} onClick={() => navegar('/contas')} />
+        <Indicador
+          rotulo="Atrasado"
+          valor={formatarReais(totalAtrasado)}
+          detalhe={`${atrasadas.length} cliente(s) · a receber ${formatarReais(totalAReceber)}`}
+          tom={totalAtrasado > 0 ? 'alerta' : 'ok'}
+          onClick={() => navegar('/contas')}
+        />
         <Indicador rotulo="Para entregar" valor={paraEntregar.length} detalhe="clientes com itens separados" tom="reservado" onClick={() => navegar('/vendas')} />
         <Indicador rotulo="Pedidos a chegar" valor={pedidosAbertos.length} detalhe="caixas das marcas" tom="aguardando" onClick={() => navegar('/pedidos')} />
         <Indicador rotulo="Sem pronta-entrega" valor={semProntaEntrega.length} detalhe="produtos zerados" onClick={() => navegar('/estoque')} />
@@ -98,16 +110,19 @@ export function HojePage() {
         </Cartao>
 
         <Cartao className="lg:col-span-2">
-          <TituloSecao titulo="Contas em aberto há mais tempo" verTodos={() => navegar('/contas')} />
+          <TituloSecao titulo={atrasadas.length ? 'Cobranças atrasadas' : 'Contas em aberto há mais tempo'} verTodos={() => navegar('/contas')} />
           <Lista vazio="Nenhuma conta em aberto. Tudo recebido!">
-            {contasAntigas.map((c) => (
+            {contasParaCobrar.map((c) => (
               <LinhaLista
                 key={c.id}
                 onClick={() => acoes.abrirFicha(c.cliente_id)}
                 titulo={c.cliente.nome}
-                subtitulo={`Desde ${formatarData(c.criado_em)} · ${diasDesde(c.criado_em)} dias`}
+                subtitulo={`Compra de ${formatarData(c.criado_em)} · ${diasDesde(c.criado_em)} dias · saldo ${formatarReais(saldoConta(c))}`}
               >
-                <span className="font-bold tabular-nums text-status-alert">{formatarReais(saldoConta(c))}</span>
+                <span className="text-meta tabular-nums hidden sm:inline">
+                  <DescricaoVencimento cobranca={c.cobranca} />
+                </span>
+                <BotaoCobrar conta={c} compacto />
               </LinhaLista>
             ))}
           </Lista>
@@ -150,14 +165,12 @@ function Lista({ children, vazio }: { children: ReactNode[]; vazio: string }) {
 
 function LinhaLista({ titulo, subtitulo, onClick, children }: { titulo: string; subtitulo: string; onClick: () => void; children: ReactNode }) {
   return (
-    <li>
-      <button type="button" onClick={onClick} className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-surface-sunken">
-        <span className="flex-1 min-w-0">
-          <span className="block font-semibold truncate">{titulo}</span>
-          <span className="block text-meta text-ink-secondary truncate">{subtitulo}</span>
-        </span>
-        {children}
+    <li className="flex items-center gap-3 pr-4 hover:bg-surface-sunken">
+      <button type="button" onClick={onClick} className="flex-1 min-w-0 text-left pl-4 py-3">
+        <span className="block font-semibold truncate">{titulo}</span>
+        <span className="block text-meta text-ink-secondary truncate">{subtitulo}</span>
       </button>
+      {children}
     </li>
   );
 }

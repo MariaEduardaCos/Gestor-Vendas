@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import { buildApp } from '../src/app.js';
+import { limparOperacoes } from './helpers.js';
 import { gerarUuidV7 } from '@consultorasync/core';
 
 describe('Catálogo da marca: prévia e atualização dos produtos pelo ciclo', () => {
@@ -39,10 +40,8 @@ describe('Catálogo da marca: prévia e atualização dos produtos pelo ciclo', 
   });
 
   afterAll(async () => {
-    // Remove só os dados deste teste (auditoria primeiro: operador tem onDelete Restrict).
-    const ids = { in: [operacaoA, operacaoB] };
-    await prisma.registroAuditoria.deleteMany({ where: { operacao_id: ids } });
-    await prisma.operacao.deleteMany({ where: { id: ids } });
+    await limparOperacoes(prisma, [operacaoA, operacaoB]);
+    await prisma.produtoReferencia.deleteMany({ where: { marca_chave: 'natura' } });
     await prisma.$disconnect();
   });
 
@@ -103,6 +102,41 @@ describe('Catálogo da marca: prévia e atualização dos produtos pelo ciclo', 
     });
     expect(semCiclo.statusCode).toBe(400);
     expect(precoRuim.statusCode).toBe(400);
+  });
+
+  it('catálogo salvo vira referência compartilhada: outra revendedora da mesma marca vê e usa, sem dados da operação A', async () => {
+    const marcaB = (await app.inject({ method: 'POST', url: '/api/marcas', headers: auth(tokenB), payload: { nome: 'NATURA', percentual_padrao: 25 } })).json().id;
+
+    const marcasB = (await app.inject({ method: 'GET', url: '/api/marcas', headers: auth(tokenB) })).json();
+    expect(marcasB[0].catalogo_compartilhado_quantidade).toBe(2);
+
+    const ref = (await app.inject({ method: 'GET', url: `/api/marcas/${marcaB}/catalogo-compartilhado`, headers: auth(tokenB) })).json();
+    expect(ref).toMatchObject({ ciclo: 'Ciclo 17/2026', quantidade: 2 });
+    expect(Object.keys(ref.itens[0]).sort()).toEqual(['codigoBarras', 'nome', 'precoVendaCentavos', 'variante']);
+
+    const aplicar = await app.inject({
+      method: 'POST',
+      url: `/api/marcas/${marcaB}/catalogo`,
+      headers: auth(tokenB),
+      payload: { ciclo: ref.ciclo, itens: ref.itens }
+    });
+    expect(aplicar.json()).toMatchObject({ novos: 2 });
+    // Custo de B usa o percentual de B (25%), não o de A
+    const hidratanteB = await prisma.produto.findFirst({ where: { operacao_id: operacaoB, codigo_barras: '7891033000011' } });
+    expect(hidratanteB).toMatchObject({ custo_centavos: 4493 });
+
+    const porCodigo = (await app.inject({ method: 'GET', url: '/api/catalogo-compartilhado/codigo/7891033000011', headers: auth(tokenB) })).json();
+    expect(porCodigo[0]).toMatchObject({ nome: 'Hidratante Tododia', preco_sugerido_centavos: 5990 });
+  });
+
+  it('com compartilhar = false o catálogo não entra na referência', async () => {
+    await app.inject({
+      method: 'POST',
+      url: `/api/marcas/${marcaId}/catalogo`,
+      headers: auth(tokenA),
+      payload: { ciclo: 'Ciclo 18/2026', itens: [{ codigoBarras: null, nome: 'Produto Privado', variante: null, precoVendaCentavos: 1000 }], compartilhar: false }
+    });
+    expect(await prisma.produtoReferencia.count({ where: { nome: 'Produto Privado' } })).toBe(0);
   });
 
   it('outra operação não consegue carregar catálogo na marca alheia', async () => {

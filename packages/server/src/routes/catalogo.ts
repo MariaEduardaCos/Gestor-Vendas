@@ -4,14 +4,19 @@ import {
   gerarUuidV7,
   createProblemDetails,
   planejarImportacaoCatalogo,
+  chaveProdutoCatalogo,
+  normalizarTexto,
   type LinhaCatalogo
 } from '@consultorasync/core';
+import type { PrismaClient } from '@prisma/client';
 
 interface ImportarCatalogoBody {
   ciclo: string;
   itens: LinhaCatalogo[];
   /** true: só calcula a prévia, sem gravar nada. */
   simular?: boolean;
+  /** Contribuir com o catálogo compartilhado (só nome, variante, código e preço). Padrão: sim. */
+  compartilhar?: boolean;
 }
 
 const MAX_ITENS = 2000;
@@ -23,7 +28,7 @@ export const catalogoRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: fastify.requireSession },
     async (request, reply) => {
       const session = request.session!;
-      const { ciclo, itens, simular } = request.body || ({} as ImportarCatalogoBody);
+      const { ciclo, itens, simular, compartilhar = true } = request.body || ({} as ImportarCatalogoBody);
       const cicloLimpo = (ciclo ?? '').trim();
 
       const invalido = (detalhe: string) =>
@@ -146,6 +151,10 @@ export const catalogoRoutes: FastifyPluginAsync = async (fastify) => {
           data: { catalogo_ciclo: cicloLimpo, catalogo_atualizado_em: agora }
         });
 
+        if (compartilhar) {
+          await contribuirCatalogoCompartilhado(tx as unknown as PrismaClient, marca.nome, cicloLimpo, acoes.map((a) => a.linha));
+        }
+
         await tx.registroAuditoria.create({
           data: {
             id: gerarUuidV7(),
@@ -153,7 +162,7 @@ export const catalogoRoutes: FastifyPluginAsync = async (fastify) => {
             operador_id: session.operadorId,
             operador_nome: session.operadorNome,
             acao: 'IMPORTAR_CATALOGO_MARCA',
-            detalhes: `Catálogo ${cicloLimpo} da marca ${marca.nome}: ${resumo.novos} novos, ${resumo.precos_alterados} preços alterados, ${resumo.sem_mudanca} sem mudança.`,
+            detalhes: `Catálogo ${cicloLimpo} da marca ${marca.nome}: ${resumo.novos} novos, ${resumo.precos_alterados} preços alterados, ${resumo.sem_mudanca} sem mudança${compartilhar ? ', compartilhado' : ''}.`,
             criado_em: agora
           }
         });
@@ -162,4 +171,86 @@ export const catalogoRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(200).send({ ...resumo, aplicado: true });
     }
   );
+
+  // GET /api/marcas/:id/catalogo-compartilhado — lista de referência da marca, montada por outras revendedoras
+  fastify.get<{ Params: { id: string } }>(
+    '/api/marcas/:id/catalogo-compartilhado',
+    { preHandler: fastify.requireSession },
+    async (request, reply) => {
+      const marca = await request.tenantPrisma.marca.findUnique({ where: { id: request.params.id } });
+      if (!marca) {
+        return reply.status(404).type('application/problem+json').send(
+          createProblemDetails(404, 'MARCA_NAO_ENCONTRADA', 'Marca Não Encontrada', 'A marca não existe ou não pertence a esta operação.')
+        );
+      }
+      // Tabela global: consultada pelo cliente base, sem filtro de operação, e só com dados de revista.
+      const refs = await fastify.prisma.produtoReferencia.findMany({
+        where: { marca_chave: normalizarTexto(marca.nome) },
+        orderBy: [{ nome: 'asc' }, { variante: 'asc' }]
+      });
+      const maisRecente = refs.reduce<(typeof refs)[number] | null>((m, r) => (!m || r.atualizado_em > m.atualizado_em ? r : m), null);
+      return reply.send({
+        marca_nome: marca.nome,
+        ciclo: maisRecente?.ciclo ?? null,
+        atualizado_em: maisRecente?.atualizado_em.toISOString() ?? null,
+        quantidade: refs.length,
+        itens: refs.map((r) => ({
+          codigoBarras: r.codigo_barras,
+          nome: r.nome,
+          variante: r.variante,
+          precoVendaCentavos: r.preco_sugerido_centavos
+        }))
+      });
+    }
+  );
+
+  // GET /api/catalogo-compartilhado/codigo/:codigo — sugestão para código de barras desconhecido
+  fastify.get<{ Params: { codigo: string } }>(
+    '/api/catalogo-compartilhado/codigo/:codigo',
+    { preHandler: fastify.requireSession },
+    async (request, reply) => {
+      const codigo = request.params.codigo.trim();
+      if (!/^\d{8,14}$/.test(codigo)) return reply.send([]);
+      const refs = await fastify.prisma.produtoReferencia.findMany({ where: { codigo_barras: codigo }, take: 5 });
+      return reply.send(
+        refs.map((r) => ({
+          marca_nome: r.marca_nome,
+          nome: r.nome,
+          variante: r.variante,
+          codigo_barras: r.codigo_barras,
+          preco_sugerido_centavos: r.preco_sugerido_centavos,
+          ciclo: r.ciclo
+        }))
+      );
+    }
+  );
 };
+
+/** Grava/atualiza a referência compartilhada da marca. Nunca leva dados da operação além do catálogo. */
+export async function contribuirCatalogoCompartilhado(db: PrismaClient, marcaNome: string, ciclo: string, linhas: LinhaCatalogo[]) {
+  const marcaChave = normalizarTexto(marcaNome);
+  for (const l of linhas) {
+    const chave = chaveProdutoCatalogo(l);
+    await db.produtoReferencia.upsert({
+      where: { marca_chave_chave: { marca_chave: marcaChave, chave } },
+      create: {
+        id: gerarUuidV7(),
+        marca_chave: marcaChave,
+        marca_nome: marcaNome,
+        chave,
+        nome: l.nome,
+        variante: l.variante,
+        codigo_barras: l.codigoBarras,
+        preco_sugerido_centavos: l.precoVendaCentavos,
+        ciclo
+      },
+      update: {
+        nome: l.nome,
+        variante: l.variante,
+        preco_sugerido_centavos: l.precoVendaCentavos,
+        ciclo,
+        contribuicoes: { increment: 1 }
+      }
+    });
+  }
+}

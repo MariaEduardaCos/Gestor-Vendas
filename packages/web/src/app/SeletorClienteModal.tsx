@@ -15,11 +15,16 @@ export function SeletorClienteModal({ titulo, onEscolher, onNovaCliente, onClose
   const { token } = useSessao();
   const [busca, setBusca] = useState('');
   const [clientes, setClientes] = useState<ClienteDTO[]>([]);
+  const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
     const t = setTimeout(() => {
       const q = busca.trim() ? `?busca=${encodeURIComponent(busca.trim())}` : '';
-      apiFetch<ClienteDTO[]>(`/clientes${q}`, token).then(setClientes).catch(() => setClientes([]));
+      setCarregando(true);
+      apiFetch<ClienteDTO[]>(`/clientes${q}`, token)
+        .then(setClientes)
+        .catch(() => setClientes([]))
+        .finally(() => setCarregando(false));
     }, 200);
     return () => clearTimeout(t);
   }, [busca, token]);
@@ -61,7 +66,9 @@ export function SeletorClienteModal({ titulo, onEscolher, onNovaCliente, onClose
               </button>
             </li>
           ))}
-          {clientes.length === 0 && <li className="py-4 text-center text-ink-secondary">Nenhuma cliente encontrada.</li>}
+          {clientes.length === 0 && (
+            <li className="py-4 text-center text-ink-secondary">{carregando ? 'Carregando…' : 'Nenhuma cliente encontrada.'}</li>
+          )}
         </ul>
         <button
           type="button"

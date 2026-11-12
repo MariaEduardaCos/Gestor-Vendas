@@ -1,4 +1,5 @@
 // Formatos das listagens usadas pelas páginas de gestão.
+import type { ResumoCobranca } from '@consultorasync/core';
 
 /** GET /api/vendas — todas as contas (vendas e encomendas) com itens. */
 export interface ContaListagem {
@@ -11,6 +12,8 @@ export interface ContaListagem {
   status_entrega: string;
   criado_em: string;
   cliente: { id: string; nome: string; telefone: string | null };
+  /** Situação de cobrança calculada no servidor (vencimentos, parcelas, atraso). */
+  cobranca: ResumoCobranca;
   itens: Array<{
     id: string;
     quantidade: number;

@@ -19,7 +19,7 @@ interface Previa {
 }
 
 interface Props {
-  marca: { id: string; nome: string; catalogo_ciclo: string | null };
+  marca: { id: string; nome: string; catalogo_ciclo: string | null; catalogo_compartilhado_quantidade?: number };
   onClose: () => void;
   onAplicado: (resumo: Previa) => void;
 }
@@ -41,6 +41,7 @@ export function CatalogoModal({ marca, onClose, onAplicado }: Props) {
   const [previa, setPrevia] = useState<Previa | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [compartilhar, setCompartilhar] = useState(true);
 
   const lerArquivo = (arquivo: File | undefined) => {
     if (!arquivo) return;
@@ -56,10 +57,32 @@ export function CatalogoModal({ marca, onClose, onAplicado }: Props) {
     try {
       const r = await apiFetch<Previa>(`/marcas/${marca.id}/catalogo`, token, {
         method: 'POST',
-        body: JSON.stringify({ ciclo, itens, simular })
+        body: JSON.stringify({ ciclo, itens, simular, compartilhar })
       });
       if (simular) setPrevia(r);
       else onAplicado(r);
+    } catch (e) {
+      setErro((e as Error).message);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const usarCompartilhado = async () => {
+    setErro(null);
+    try {
+      const ref = await apiFetch<{ ciclo: string | null; itens: LinhaCatalogo[] }>(`/marcas/${marca.id}/catalogo-compartilhado`, token);
+      if (!ref.itens.length) return setErro('Ainda não há catálogo compartilhado desta marca.');
+      const cicloRef = ciclo.trim() || ref.ciclo || 'Catálogo compartilhado';
+      setCiclo(cicloRef);
+      setLinhas(ref.itens);
+      setErrosLeitura([]);
+      setEnviando(true);
+      const r = await apiFetch<Previa>(`/marcas/${marca.id}/catalogo`, token, {
+        method: 'POST',
+        body: JSON.stringify({ ciclo: cicloRef, itens: ref.itens, simular: true })
+      });
+      setPrevia(r);
     } catch (e) {
       setErro((e as Error).message);
     } finally {
@@ -101,6 +124,21 @@ export function CatalogoModal({ marca, onClose, onAplicado }: Props) {
         <div className="p-5 overflow-y-auto flex flex-col gap-4">
           {!previa ? (
             <>
+              {(marca.catalogo_compartilhado_quantidade ?? 0) > 0 && (
+                <div className="p-3 rounded-lg border border-status-available bg-status-available-bg flex flex-wrap items-center gap-3">
+                  <p className="flex-1 min-w-[200px] text-body-md">
+                    <strong>{marca.catalogo_compartilhado_quantidade} produtos</strong> desta marca estão no catálogo compartilhado pelas revendedoras. Use a lista e confira os preços na prévia.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={usarCompartilhado}
+                    disabled={enviando}
+                    className="min-h-[44px] px-4 rounded-md bg-status-available text-ink-inverse font-semibold disabled:opacity-60"
+                  >
+                    Usar catálogo compartilhado
+                  </button>
+                </div>
+              )}
               <label className="flex flex-col gap-1">
                 <span className="text-label-strong">Ciclo ou campanha</span>
                 <input
@@ -160,6 +198,15 @@ export function CatalogoModal({ marca, onClose, onAplicado }: Props) {
                 Vendas e encomendas já registradas continuam com o preço da época. O custo estimado acompanha o percentual da marca; custo informado à mão não muda.
               </p>
             </>
+          )}
+
+          {!previa && (
+            <label className="flex items-start gap-2 text-meta text-ink-secondary">
+              <input type="checkbox" checked={compartilhar} onChange={(e) => setCompartilhar(e.target.checked)} className="mt-0.5 w-4 h-4 accent-brand-primary" />
+              <span>
+                Compartilhar esta lista com outras revendedoras da marca (só nome, variante, código de barras e preço da revista — nunca clientes, estoque ou custos).
+              </span>
+            </label>
           )}
 
           {errosLeitura.length > 0 && (

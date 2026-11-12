@@ -14,3 +14,4 @@ export * from './domain/encomenda.js';
 export * from './domain/compra-marca.js';
 export * from './errors/problem-details.js';
 export * from './domain/catalogo.js';
+export * from './domain/cobranca.js';

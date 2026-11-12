@@ -12,7 +12,8 @@
     "lint": "npm run --workspaces --if-present lint",
     "start:server": "node packages/server/dist/index.js",
     "start:web": "npm --prefix packages/web run dev",
-    "dev": "npm run build && node packages/server/dist/index.js & npm --prefix packages/web run dev"
+    "dev": "npm run build && node packages/server/dist/index.js & npm --prefix packages/web run dev",
+    "dev:celular": "npm --prefix packages/web run dev:celular"
   },
   "devDependencies": {
     "typescript": "^5.7.3"

@@ -4,6 +4,7 @@ import { buildApp } from '../src/app.js';
 import { gerarUuidV7 } from '@consultorasync/core';
 import { createTenantPrisma } from '../src/db/tenant-prisma.js';
 import { hashPin } from '../src/routes/auth.js';
+import { limparBancoDeTeste } from './helpers.js';
 
 describe('Multi-tenant Isolation and Operational Session Tests', () => {
   const prisma = new PrismaClient();
@@ -21,11 +22,8 @@ describe('Multi-tenant Isolation and Operational Session Tests', () => {
   beforeAll(async () => {
     await prisma.$connect();
 
-    // Limpeza de tabelas para o teste
-    await prisma.registroAuditoria.deleteMany();
-    await prisma.recursoExemplo.deleteMany();
-    await prisma.operador.deleteMany();
-    await prisma.operacao.deleteMany();
+    // Limpeza completa (inclui dados deixados por outros arquivos de teste)
+    await limparBancoDeTeste(prisma);
 
     // 1. Cria Operação A (Dona Sônia)
     await prisma.operacao.create({

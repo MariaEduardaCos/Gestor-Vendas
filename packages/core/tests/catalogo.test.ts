@@ -85,3 +85,13 @@ describe('MARCAS_CONHECIDAS', () => {
     expect(MARCAS_CONHECIDAS.every((m) => m.percentualSugerido >= 0 && m.percentualSugerido <= 100)).toBe(true);
   });
 });
+
+describe('chaveProdutoCatalogo', () => {
+  it('usa o código quando existe e nome+variante normalizados quando não', async () => {
+    const { chaveProdutoCatalogo } = await import('../src/domain/catalogo.js');
+    expect(chaveProdutoCatalogo({ codigoBarras: '7891033000011', nome: 'X', variante: null })).toBe('cod:7891033000011');
+    expect(chaveProdutoCatalogo({ codigoBarras: null, nome: 'Hidratante  ÁGUA', variante: '400ml' })).toBe(
+      chaveProdutoCatalogo({ codigoBarras: null, nome: 'hidratante agua', variante: '400ML' })
+    );
+  });
+});
