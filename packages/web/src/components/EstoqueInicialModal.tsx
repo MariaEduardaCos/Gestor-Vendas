@@ -74,7 +74,7 @@ export function EstoqueInicialModal({
 
     if (isAjuste && quantidade < reservados) {
       setErro(
-        `Trava de Segurança: Não é permitido reduzir a contagem física para ${quantidade} unidade(s) pois existem ${reservados} unidade(s) reservadas para clientes (FR-030).`
+        `Trava de Segurança: Não é permitido reduzir a contagem física para ${quantidade} unidade(s) pois existem ${reservados} unidade(s) reservadas para clientes.`
       );
       setSalvando(false);
       return;
@@ -150,7 +150,7 @@ export function EstoqueInicialModal({
         <div className="flex items-start justify-between gap-3 border-b border-border-hairline pb-3">
           <div>
             <span className="text-meta font-bold uppercase tracking-wider text-brand-primary block">
-              {isAjuste ? 'Ajuste de Inventário (FR-030)' : 'Contagem Física da Estante'}
+              {isAjuste ? 'Corrigir contagem' : 'Contagem Física da Estante'}
             </span>
             <h2 id="modal-estoque-titulo" className="text-title-lg font-bold text-ink-primary">
               {isAjuste ? 'Ajustar Inventário Físico' : 'Estoque Inicial do Produto'}
@@ -192,7 +192,7 @@ export function EstoqueInicialModal({
             <div>
               <span>Trava de Segurança Ativa:</span>
               <p className="font-normal text-xs mt-0.5">
-                Não é permitido reduzir a contagem física para menos que as {reservados} unidades já reservadas para clientes. Cancele ou desvincule as reservas afetadas antes de ajustar (FR-030, AD-3).
+                Não é permitido reduzir a contagem física para menos que as {reservados} unidades já reservadas para clientes. Cancele ou desvincule as reservas afetadas antes de ajustar.
               </p>
             </div>
           </div>

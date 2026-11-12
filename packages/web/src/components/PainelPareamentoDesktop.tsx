@@ -247,7 +247,7 @@ export function PainelPareamentoDesktop({
             </h3>
           </div>
           <p className="text-body-md text-ink-secondary mt-1">
-            Transforme a câmera do seu celular em um leitor ótico imediato, sem digitar senhas ou expor dados (AD-6).
+            Transforme a câmera do seu celular em um leitor ótico imediato, sem digitar senhas.
           </p>
         </div>
 

@@ -10,6 +10,8 @@ interface VendaModalProps {
   onClose: () => void;
   onVendaConcluida: (venda: any) => void;
   onAbrirGavetaCliente?: () => void;
+  /** Cliente cadastrada pela gaveta durante esta venda: entra na lista já escolhida, sem perder os itens. */
+  clienteNovo?: ClienteOption | null;
 }
 
 interface ItemSelecionado {
@@ -31,7 +33,8 @@ export function VendaModal({
   apiBaseUrl = '/api',
   onClose,
   onVendaConcluida,
-  onAbrirGavetaCliente
+  onAbrirGavetaCliente,
+  clienteNovo
 }: VendaModalProps) {
   const [clientes, setClientes] = useState<ClienteOption[]>([]);
   const [clienteSelecionadoId, setClienteSelecionadoId] = useState<string>('');
@@ -54,6 +57,16 @@ export function VendaModal({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, salvando, onClose]);
+
+  useEffect(() => {
+    if (!isOpen || !clienteNovo) return;
+    setClientes((atuais) =>
+      atuais.some((c) => c.id === clienteNovo.id)
+        ? atuais
+        : [...atuais, clienteNovo].sort((a, b) => a.nome.localeCompare(b.nome))
+    );
+    setClienteSelecionadoId(clienteNovo.id);
+  }, [isOpen, clienteNovo]);
 
   useEffect(() => {
     if (isOpen) {
@@ -84,10 +97,8 @@ export function VendaModal({
 
       if (resClientes.ok) {
         const dataClientes = await resClientes.json();
+        // Não escolhe uma cliente sozinho: a revendedora precisa indicar para quem é a venda.
         setClientes(dataClientes);
-        if (!clienteSelecionadoId && dataClientes.length > 0 && !clientePreSelecionado) {
-          setClienteSelecionadoId(dataClientes[0].id);
-        }
       }
 
       let produtos: ProdutoDTO[] = [];
@@ -281,7 +292,7 @@ export function VendaModal({
                 </svg>
               </span>
               <h2 id="venda-modal-title" className="text-xl font-bold text-text-primary">
-                Nova Venda de Pronta-Entrega (S8)
+                Nova venda
               </h2>
             </div>
             <p className="text-xs text-text-secondary mt-1">

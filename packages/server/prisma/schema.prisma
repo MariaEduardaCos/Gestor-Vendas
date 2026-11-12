@@ -172,6 +172,9 @@ model Marca {
   operacao_id       String
   nome              String
   percentual_padrao Float?
+  /// Último catálogo (ciclo/campanha da revista) carregado para esta marca
+  catalogo_ciclo         String?
+  catalogo_atualizado_em DateTime?
   criado_em         DateTime @default(now())
   atualizado_em     DateTime @updatedAt
 
@@ -194,6 +197,8 @@ model Produto {
   preco_venda_centavos Int
   custo_centavos       Int?
   proveniencia_custo   String   @default("DESCONHECIDO")
+  /// Ciclo do catálogo da marca em que o produto apareceu por último
+  ciclo_catalogo       String?
   criado_em            DateTime @default(now())
   atualizado_em        DateTime @updatedAt
 

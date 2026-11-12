@@ -110,6 +110,18 @@ const sessionPluginCallback: FastifyPluginAsync = async (fastify) => {
       );
     }
 
+    // O token é assinado e não guarda estado: confirma que a pessoa ainda existe e está ativa
+    // naquela operação (ex.: banco recriado, operador desativado), senão a sessão é recusada.
+    const operador = await fastify.prisma.operador.findFirst({
+      where: { id: payload.operador_id, operacao_id: payload.operacao_id, ativo: true },
+      select: { id: true }
+    });
+    if (!operador) {
+      return reply.status(401).type('application/problem+json').send(
+        createProblemDetails(401, 'UNAUTHORIZED', 'Não Autorizado', 'Sessão encerrada. Entre novamente.')
+      );
+    }
+
     request.session = new SessaoOperacional({
       operacaoId: payload.operacao_id,
       operadorId: payload.operador_id,

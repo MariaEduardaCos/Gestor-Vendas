@@ -24,6 +24,7 @@ export function EncomendaModal({
   onEncomendaCriada
 }: EncomendaModalProps) {
   const [produtosCatalogo, setProdutosCatalogo] = useState<ProdutoDTO[]>([]);
+  const [marcaFiltro, setMarcaFiltro] = useState<string | null>(null);
   const [carregandoProdutos, setCarregandoProdutos] = useState(false);
   const [termoBusca, setTermoBusca] = useState('');
   const [descricao, setDescricao] = useState('');
@@ -75,7 +76,10 @@ export function EncomendaModal({
 
   if (!isOpen || !cliente) return null;
 
+  const marcasDoCatalogo = [...new Set(produtosCatalogo.map((p) => p.marca_nome).filter((m): m is string => !!m))].sort();
+
   const produtosFiltrados = produtosCatalogo.filter((p) => {
+    if (marcaFiltro && p.marca_nome !== marcaFiltro) return false;
     if (!termoBusca.trim()) return true;
     const t = termoBusca.toLowerCase();
     const nomeOk = p.nome.toLowerCase().includes(t);
@@ -192,7 +196,7 @@ export function EncomendaModal({
         <div className="p-4 border-b border-border-hairline flex items-center justify-between">
           <div>
             <span className="text-meta font-semibold text-brand-primary uppercase tracking-wide">
-              Anotação de Encomenda (S7)
+              Anotar encomenda
             </span>
             <h2 className="text-title-md font-bold text-ink-primary">
               Para: {cliente.nome}
@@ -323,6 +327,23 @@ export function EncomendaModal({
             <label htmlFor="busca-produto-encomenda" className="block text-label-strong font-bold text-ink-primary mb-1.5">
               Escolher Produtos do Catálogo
             </label>
+            {marcasDoCatalogo.length > 1 && (
+              <div className="flex gap-1.5 overflow-x-auto pb-2" role="group" aria-label="Filtrar por marca">
+                {[null, ...marcasDoCatalogo].map((m) => (
+                  <button
+                    key={m ?? 'todas'}
+                    type="button"
+                    onClick={() => setMarcaFiltro(m)}
+                    aria-pressed={marcaFiltro === m}
+                    className={`whitespace-nowrap min-h-[36px] px-3 rounded-full text-meta font-semibold border ${
+                      marcaFiltro === m ? 'bg-ink-primary text-ink-inverse border-ink-primary' : 'border-border-strong text-ink-secondary'
+                    }`}
+                  >
+                    {m ?? 'Todas as marcas'}
+                  </button>
+                ))}
+              </div>
+            )}
             <input
               id="busca-produto-encomenda"
               type="text"

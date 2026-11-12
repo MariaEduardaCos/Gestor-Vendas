@@ -25,7 +25,24 @@ export default {
         'status-alert': '#A32224',
         'status-alert-bg': '#FCEBEB',
         'border-hairline': '#E7E2DA',
-        'border-strong': '#C9C2B7'
+        'border-strong': '#C9C2B7',
+
+        // Apelidos usados por componentes antigos (antes ficavam sem cor e as telas saíam transparentes)
+        surface: '#FFFFFF',
+        'surface-subtle': '#FBF9F6',
+        'surface-hover': '#F3EFEA',
+        border: '#E7E2DA',
+        primary: '#BD5338',
+        'primary-dark': '#A4442C',
+        'text-primary': '#1F1E1C',
+        'text-secondary': '#5C5852',
+        'text-muted': '#8C867E',
+        'status-danger': '#A32224',
+        'status-danger-bg': '#FCEBEB'
+      },
+      zIndex: {
+        '60': '60',
+        '70': '70'
       },
       fontFamily: {
         sans: ["'Plus Jakarta Sans'", 'system-ui', '-apple-system', 'sans-serif']

@@ -121,7 +121,7 @@ export function ClienteDrawer({
       role="dialog"
       aria-modal="true"
       aria-label="Cadastrar Nova Cliente"
-      className="fixed inset-0 z-50 flex flex-col justify-end bg-ink-primary/50 backdrop-blur-sm transition-opacity"
+      className="fixed inset-0 z-60 flex flex-col justify-end bg-ink-primary/50 backdrop-blur-sm transition-opacity"
       onClick={(e) => {
         if (e.target === e.currentTarget && !salvando) onClose();
       }}

@@ -89,7 +89,8 @@ export const marcasRoutes: FastifyPluginAsync = async (fastify) => {
               nome: { contains: termo }
             }
           : {},
-        orderBy: { nome: 'asc' }
+        orderBy: { nome: 'asc' },
+        include: { _count: { select: { produtos: true } } }
       });
 
       return reply.status(200).send(
@@ -98,6 +99,9 @@ export const marcasRoutes: FastifyPluginAsync = async (fastify) => {
           operacao_id: m.operacao_id,
           nome: m.nome,
           percentual_padrao: m.percentual_padrao,
+          catalogo_ciclo: m.catalogo_ciclo,
+          catalogo_atualizado_em: m.catalogo_atualizado_em?.toISOString() ?? null,
+          quantidade_produtos: m._count.produtos,
           criado_em: m.criado_em.toISOString(),
           atualizado_em: m.atualizado_em.toISOString()
         }))

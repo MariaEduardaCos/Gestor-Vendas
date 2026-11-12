@@ -755,7 +755,7 @@ export function ClienteFichaModal({
 
                           {aguardandoFabrica && !visaoSemAguardados[conta.id] && (
                             <div className="px-2.5 py-1 bg-status-waiting-bg rounded text-meta text-status-waiting font-medium">
-                              ⏳ Itens aguardando fábrica: R$ 0,00 cobrável hoje (AD-4)
+                              ⏳ Itens aguardando fábrica: R$ 0,00 a cobrar hoje
                             </div>
                           )}
 
@@ -1279,7 +1279,7 @@ export function ClienteFichaModal({
               {formaPagamento === 'CARTAO' && (
                 <div>
                   <label htmlFor="taxaCartao" className="block text-meta font-bold text-ink-primary mb-1">
-                    Taxa da Maquininha (R$) - Absorvida por você (FR-035):
+                    Taxa da Maquininha (R$) — paga por você:
                   </label>
                   <input
                     id="taxaCartao"

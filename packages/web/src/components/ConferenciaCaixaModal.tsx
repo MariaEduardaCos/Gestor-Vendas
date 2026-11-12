@@ -329,10 +329,10 @@ export function ConferenciaCaixaModal({
             <span className="text-title-lg">📦</span>
             <div>
               <h2 className="text-title-md font-bold text-ink-primary">
-                Conferência de Caixa da Fábrica (S5)
+                Conferir caixa da marca
               </h2>
               <p className="text-meta text-ink-secondary">
-                Entrada física e destinação mandatória com chave de idempotência (AD-3, AD-7, FR-020)
+                Bipe ou digite cada produto que chegou e diga para quem ele vai.
               </p>
             </div>
           </div>
@@ -439,7 +439,7 @@ export function ConferenciaCaixaModal({
                   : 'bg-brand-primary hover:bg-brand-hover text-ink-inverse shadow-sm'
               }`}
             >
-              <span>{modoLeituraAtivo ? '📋 Ocultar Câmera / Ver Apenas Lista' : '📷 Abrir Câmera para Bipar Caixa (S5)'}</span>
+              <span>{modoLeituraAtivo ? '📋 Ocultar Câmera / Ver Apenas Lista' : '📷 Abrir câmera para bipar a caixa'}</span>
             </button>
           </div>
 
@@ -575,7 +575,7 @@ export function ConferenciaCaixaModal({
         <div className="p-4 border-t border-border-hairline bg-surface-subtle flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="text-meta text-ink-secondary flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-status-available" />
-            <span>Invariante Garantida: Presentes = Reservados + ProntaEntrega (AD-3)</span>
+            <span>Em casa = separados para clientes + pronta-entrega</span>
           </div>
 
           <button
@@ -598,10 +598,10 @@ export function ConferenciaCaixaModal({
                 <span className="text-title-lg">👤📦</span>
                 <div>
                   <h3 className="text-title-md font-bold text-ink-primary">
-                    Destinação Mandatória (S6)
+                    Para quem vai este produto?
                   </h3>
                   <span className="text-meta text-status-reserved font-bold">
-                    Reserva Física Nominal (FR-022)
+                    Separar para uma cliente ou deixar na pronta-entrega
                   </span>
                 </div>
               </div>
@@ -734,10 +734,10 @@ export function ConferenciaCaixaModal({
                 <span className="text-title-lg">⚠️🏭</span>
                 <div>
                   <h3 className="text-title-md font-bold text-ink-primary">
-                    Confirmar Falta da Fábrica (S9)
+                    Confirmar que faltou na caixa
                   </h3>
                   <span className="text-meta text-status-reserved font-bold">
-                    Cancelamento de Saldo Pendente (FR-024)
+                    O item sai da encomenda e da conta da cliente
                   </span>
                 </div>
               </div>
@@ -763,7 +763,7 @@ export function ConferenciaCaixaModal({
               {modalFaltaItem.destinacao === 'CLIENTE' && modalFaltaItem.cliente_nome ? (
                 <div className="mt-2 p-2.5 bg-status-reserved-bg border border-status-reserved/40 rounded text-meta text-status-reserved font-medium">
                   <span className="font-bold block">👤 Impacto na Conta da Cliente:</span>
-                  Este item foi encomendado por <strong>{modalFaltaItem.cliente_nome}</strong>. O valor será abatido da conta dela. Se a conta já tiver sido paga total ou parcialmente, um crédito ou estorno será registrado automaticamente (AD-5, FR-024).
+                  Este item foi encomendado por <strong>{modalFaltaItem.cliente_nome}</strong>. O valor será abatido da conta dela. Se a conta já tiver sido paga total ou parcialmente, um crédito ou estorno será registrado automaticamente.
                 </div>
               ) : (
                 <div className="mt-2 p-2 bg-brand-subtle text-brand-primary rounded text-meta">
