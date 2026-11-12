@@ -138,7 +138,7 @@ export const contasRoutes: FastifyPluginAsync = async (fastify) => {
         idempotency_key
       } = request.body || {};
 
-      const session = request.session;
+      const session = request.session!;
 
       // Validação de Idempotência Obrigatória via UUID v4 (AD-7)
       if (idempotency_key) {
@@ -357,7 +357,7 @@ export const contasRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
-      const session = request.session;
+      const session = request.session!;
 
       try {
         const resultado = await request.tenantPrisma.$transaction(async (tx: any) => {
@@ -521,7 +521,7 @@ export const contasRoutes: FastifyPluginAsync = async (fastify) => {
         );
       }
 
-      const session = request.session;
+      const session = request.session!;
 
       try {
         const resultado = await request.tenantPrisma.$transaction(async (tx: any) => {
