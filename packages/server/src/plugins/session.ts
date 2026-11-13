@@ -4,6 +4,7 @@ import fp from 'fastify-plugin';
 import { SessaoOperacional, createProblemDetails } from '@consultorasync/core';
 import { createTenantPrisma, type TenantPrismaClient } from '../db/tenant-prisma.js';
 import type { PrismaClient } from '@prisma/client';
+import { segredoSessao } from '../config.js';
 
 export interface SessionPayload {
   operacao_id: string;
@@ -13,12 +14,11 @@ export interface SessionPayload {
   exp: number;
 }
 
-const DEFAULT_SECRET = process.env.SESSION_SECRET || 'consultorasync-dev-session-secret-key-32b';
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 horas
 
 export function createSessionToken(
   data: { operacao_id: string; operador_id: string; operador_nome: string },
-  secret = DEFAULT_SECRET
+  secret = segredoSessao()
 ): string {
   const payload: SessionPayload = {
     operacao_id: data.operacao_id,
@@ -37,7 +37,7 @@ export function createSessionToken(
   return `${payloadB64}.${signature}`;
 }
 
-export function verifySessionToken(token: string, secret = DEFAULT_SECRET): SessionPayload | null {
+export function verifySessionToken(token: string, secret = segredoSessao()): SessionPayload | null {
   try {
     const parts = token.split('.');
     if (parts.length !== 2) return null;

@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { SessaoProvider } from './app/SessaoContext';
+import { SessaoProvider, useSessao } from './app/SessaoContext';
 import { AcoesProvider } from './app/AcoesContext';
 import { AppShell } from './layout/AppShell';
 import { LeitorRemotoMobileView } from './components/LeitorRemotoMobileView';
@@ -14,6 +14,7 @@ import { FinanceiroPage } from './pages/FinanceiroPage';
 import { LeitorPage } from './pages/LeitorPage';
 import { ConfiguracoesPage } from './pages/ConfiguracoesPage';
 import { MarcasPage } from './pages/marcas/MarcasPage';
+import { EntrarPage } from './pages/EntrarPage';
 
 function tokenLeitorRemoto(): string | null {
   const params = new URLSearchParams(window.location.search);
@@ -29,6 +30,20 @@ export function App() {
 
   return (
     <SessaoProvider>
+      <PortaoSessao />
+    </SessaoProvider>
+  );
+}
+
+/** Sem sessão válida, mostra a tela de entrada; com sessão, o painel. */
+function PortaoSessao() {
+  const { estado } = useSessao();
+  if (estado === 'verificando') {
+    return <div className="min-h-screen bg-surface-base flex items-center justify-center text-ink-secondary">Carregando…</div>;
+  }
+  if (estado === 'anonima') return <EntrarPage />;
+
+  return (
       <AcoesProvider>
         <BrowserRouter>
           <Routes>
@@ -49,7 +64,6 @@ export function App() {
           </Routes>
         </BrowserRouter>
       </AcoesProvider>
-    </SessaoProvider>
   );
 }
 

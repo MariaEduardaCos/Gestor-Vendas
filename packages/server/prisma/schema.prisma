@@ -38,6 +38,7 @@ model Operador {
   operacao_id String
   nome        String
   pin_hash    String?
+  usuario     String?  @unique
   ativo       Boolean  @default(true)
   criado_em   DateTime @default(now())
 

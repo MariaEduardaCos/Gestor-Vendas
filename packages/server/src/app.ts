@@ -4,6 +4,7 @@ import fastifyWebsocket from '@fastify/websocket';
 import { PrismaClient } from '@prisma/client';
 import { createProblemDetails, DomainError } from '@consultorasync/core';
 import { sessionPlugin } from './plugins/session.js';
+import { origensPermitidas, segredoSessao } from './config.js';
 import { authRoutes } from './routes/auth.js';
 import { operacionalRoutes } from './routes/operacional.js';
 import { clientesRoutes } from './routes/clientes.js';
@@ -17,12 +18,16 @@ import { vendasRoutes } from './routes/vendas.js';
 import { contasRoutes } from './routes/contas.js';
 import { catalogoRoutes } from './routes/catalogo.js';
 import { cobrancaRoutes } from './routes/cobranca.js';
+import { exportacaoRoutes } from './routes/exportacao.js';
 
 export interface BuildAppOptions {
   prisma?: PrismaClient;
 }
 
 export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
+  // Falha na largada se o segredo de sessão não estiver configurado fora do desenvolvimento.
+  segredoSessao();
+
   const app = fastify({
     logger: process.env.NODE_ENV === 'test' ? false : true
   });
@@ -32,7 +37,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 
   // CORS
   app.register(cors, {
-    origin: true,
+    origin: origensPermitidas(),
     credentials: true
   });
 
@@ -56,6 +61,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(contasRoutes);
   app.register(catalogoRoutes);
   app.register(cobrancaRoutes);
+  app.register(exportacaoRoutes);
 
   // Global Error Handler conforme RFC 7807
   app.setErrorHandler((error: FastifyError | Error, request, reply) => {

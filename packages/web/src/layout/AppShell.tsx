@@ -60,7 +60,7 @@ function classeLink(ativo: boolean) {
 }
 
 export function AppShell() {
-  const { sessao } = useSessao();
+  const { sessao, sair } = useSessao();
   const acoes = useAcoes();
   const { pathname } = useLocation();
   const [menuMaisAberto, setMenuMaisAberto] = useState(false);
@@ -93,7 +93,12 @@ export function AppShell() {
         </nav>
         <div className="px-5 py-4 border-t border-border-hairline">
           <p className="text-meta text-ink-muted">Conectada como</p>
-          <p className="text-label-strong">{nomeOperador}</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-label-strong truncate">{nomeOperador}</p>
+            <button type="button" onClick={sair} className="text-meta font-semibold text-ink-secondary hover:text-brand-primary min-h-[36px] px-2">
+              Sair
+            </button>
+          </div>
         </div>
       </aside>
 

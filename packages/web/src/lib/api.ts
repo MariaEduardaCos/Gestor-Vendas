@@ -66,3 +66,24 @@ export function formatarData(iso: string | null | undefined): string {
 export function diasDesde(iso: string): number {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
 }
+
+/** Baixa um arquivo da API (com o token da sessão) e entrega ao navegador para salvar. */
+export async function baixarArquivo(path: string, token: string | null): Promise<string> {
+  const res = await fetch(path.startsWith('/api') ? path : `/api${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  });
+  if (!res.ok) {
+    const corpo = await res.json().catch(() => null);
+    throw new ApiError(corpo?.detail || corpo?.title || 'Não foi possível baixar o arquivo.', res.status);
+  }
+  const nome = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'exportacao';
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = nome;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return nome;
+}

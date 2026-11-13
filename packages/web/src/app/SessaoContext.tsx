@@ -2,18 +2,28 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 
 const CHAVE_TOKEN = 'consultorasync_session_token';
 
-interface SessaoInfo {
+export interface SessaoInfo {
   operador_id: string;
   operador_nome: string;
   operacao_id: string;
+  usuario?: string | null;
+  possui_pin?: boolean;
 }
+
+/** verificando: conferindo o token guardado; anonima: precisa entrar; conectada: sessão válida. */
+export type EstadoSessao = 'verificando' | 'anonima' | 'conectada';
 
 interface SessaoContextValue {
   token: string | null;
   sessao: SessaoInfo | null;
+  estado: EstadoSessao;
   /** Incrementado sempre que algum formulário altera dados; telas abertas recarregam. */
   versaoDados: number;
   notificarAlteracao: () => void;
+  /** Guarda a sessão devolvida pelo login ou cadastro. */
+  entrar: (token: string, sessao: SessaoInfo) => void;
+  /** Recarrega os dados da sessão (ex.: depois de trocar usuário ou PIN). */
+  atualizarSessao: () => void;
   sair: () => void;
 }
 
@@ -27,58 +37,74 @@ function lerToken(): string | null {
   }
 }
 
+function gravarToken(t: string | null) {
+  try {
+    if (t) localStorage.setItem(CHAVE_TOKEN, t);
+    else localStorage.removeItem(CHAVE_TOKEN);
+  } catch {
+    /* armazenamento indisponível: sessão vale só nesta aba */
+  }
+}
+
 export function SessaoProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(lerToken);
   const [sessao, setSessao] = useState<SessaoInfo | null>(null);
+  const [estado, setEstado] = useState<EstadoSessao>(() => (lerToken() ? 'verificando' : 'anonima'));
   const [versaoDados, setVersaoDados] = useState(0);
+  const [recarga, setRecarga] = useState(0);
 
-  const guardarToken = (t: string | null) => {
-    setToken(t);
-    try {
-      if (t) localStorage.setItem(CHAVE_TOKEN, t);
-      else localStorage.removeItem(CHAVE_TOKEN);
-    } catch {
-      /* armazenamento indisponível: sessão vale só nesta aba */
-    }
-  };
-
-  // TODO(login): substituir a sessão de desenvolvimento por login com operador e PIN.
+  // Confere o token guardado no aparelho; se o servidor recusar, volta para a tela de entrada.
   useEffect(() => {
-    let ativo = true;
-    const iniciarSessaoDev = async () => {
-      const res = await fetch('/api/auth/dev-session', { method: 'POST' });
-      const dados = res.ok ? await res.json() : null;
-      if (ativo && dados?.token) {
-        guardarToken(dados.token);
-        setSessao(dados.session);
-      }
-    };
-
     if (!token) {
-      iniciarSessaoDev().catch(() => undefined);
+      setEstado('anonima');
       return;
     }
-
+    let ativo = true;
     fetch('/api/auth/session', { headers: { Authorization: `Bearer ${token}` } })
       .then(async (res) => {
         if (!ativo) return;
-        if (res.ok) setSessao(await res.json());
-        else guardarToken(null); // token expirado (ex.: servidor reiniciado)
+        if (res.ok) {
+          setSessao(await res.json());
+          setEstado('conectada');
+        } else if (res.status === 401) {
+          gravarToken(null);
+          setToken(null);
+          setSessao(null);
+          setEstado('anonima');
+        }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        // Servidor fora do ar: mantém o token e tenta de novo na próxima carga.
+        if (ativo) setEstado((e) => (e === 'verificando' ? 'anonima' : e));
+      });
     return () => {
       ativo = false;
     };
-  }, [token]);
+  }, [token, recarga]);
 
-  const notificarAlteracao = useCallback(() => setVersaoDados((v) => v + 1), []);
-  const sair = useCallback(() => {
-    guardarToken(null);
-    setSessao(null);
+  const entrar = useCallback((novoToken: string, info: SessaoInfo) => {
+    gravarToken(novoToken);
+    setSessao(info);
+    setEstado('conectada');
+    setToken(novoToken);
   }, []);
 
+  const sair = useCallback(() => {
+    const atual = lerToken();
+    if (atual) {
+      fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${atual}` } }).catch(() => undefined);
+    }
+    gravarToken(null);
+    setToken(null);
+    setSessao(null);
+    setEstado('anonima');
+  }, []);
+
+  const notificarAlteracao = useCallback(() => setVersaoDados((v) => v + 1), []);
+  const atualizarSessao = useCallback(() => setRecarga((r) => r + 1), []);
+
   return (
-    <SessaoContext.Provider value={{ token, sessao, versaoDados, notificarAlteracao, sair }}>
+    <SessaoContext.Provider value={{ token, sessao, estado, versaoDados, notificarAlteracao, entrar, atualizarSessao, sair }}>
       {children}
     </SessaoContext.Provider>
   );

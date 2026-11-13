@@ -10,7 +10,7 @@ Pendências e saldo por cliente (fiado),cobranca,must,MR,yes,Contas separadas po
 Pagamento parcial (Pix/dinheiro/cartão),cobranca,must,MR,yes,
 Relatório financeiro (recebido/a receber),financeiro,must,MR+RO,partial,Resumo financeiro sem gráficos nem período
 Uso no celular e no computador,plataforma,must,MR+RO,yes,Web responsiva
-Login individual e acesso por função,plataforma,must,RO,no,Sessão de desenvolvimento automática; login com PIN pendente
+Login individual e acesso por função,plataforma,must,RO,partial,"Login com usuário + PIN (scrypt, bloqueio após 5 erros) e primeiro acesso; conta de demonstração só em desenvolvimento; perfis por função (ajudante/contratada) pendentes"
 Encomenda por cliente ligada ao pedido à marca,pedidos,must,nenhum,yes,Diferencial: concorrentes não comunicam
 Conferência da caixa recebida e falta da marca,pedidos,must,nenhum,yes,Diferencial
 Controle de validade e lotes,estoque,should,MR,no,Dor do briefing; recurso esperado na categoria
@@ -21,7 +21,7 @@ Importar produtos por planilha,produtos,should,MR,partial,Catálogo aceita lista
 Estorno de pagamento e crédito da cliente,cobranca,should,nenhum,yes,
 Desfazer/cancelar venda,vendas,should,MR,yes,Cancelamento de item com liberação de reserva
 Relatórios de lucratividade por período,relatorios,should,MR+RO,no,
-Exportação de dados (CSV),relatorios,should,MR+RO,no,
+Exportação de dados (CSV),relatorios,should,MR+RO,yes,"Clientes, contas, itens vendidos, pagamentos e estoque em CSV para Excel (;, vírgula decimal, BOM) + cópia completa em JSON; registrado na auditoria"
 Despesas e bônus no financeiro,financeiro,should,MR+RO,no,
 Mensagens e lembretes por WhatsApp,comunicacao,could,MR+RO,partial,Botão Cobrar abre o WhatsApp com mensagem pronta (link wa.me); sem envio automático
 Loja online/vitrine com pedidos,vendas,could,MR+RO,no,Fora do escopo T1
