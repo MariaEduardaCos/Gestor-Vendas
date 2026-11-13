@@ -28,6 +28,7 @@ model Operacao {
   registros_idempotencia RegistroIdempotencia[]
   pagamentos_conta PagamentoConta[]
   excedentes_pendentes ExcedentePendente[]
+  contatos_cobranca ContatoCobranca[]
   parcelas_conta   ParcelaConta[]
 
   @@map("operacoes")
@@ -94,6 +95,7 @@ model Cliente {
   encomendas Encomenda[]
   itens_compra_marca ItemCompraMarca[]
   excedentes ExcedentePendente[]
+  contatos_cobranca ContatoCobranca[]
 
   @@index([operacao_id])
   @@index([operacao_id, nome])
@@ -197,6 +199,8 @@ model Produto {
   nome                 String
   variante             String?
   codigo_barras        String?
+  /// Código impresso na revista do ciclo (3 a 7 números), usado no pedido à marca
+  codigo_revista       String?
   preco_venda_centavos Int
   custo_centavos       Int?
   proveniencia_custo   String   @default("DESCONHECIDO")
@@ -214,6 +218,7 @@ model Produto {
 
   @@index([operacao_id])
   @@index([operacao_id, codigo_barras])
+  @@index([operacao_id, codigo_revista])
   @@index([operacao_id, nome])
   @@index([marca_id])
   @@map("produtos")
@@ -422,6 +427,7 @@ model ProdutoReferencia {
   nome                    String
   variante                String?
   codigo_barras           String?
+  codigo_revista          String?
   preco_sugerido_centavos Int
   ciclo                   String
   contribuicoes           Int      @default(1)
@@ -429,5 +435,26 @@ model ProdutoReferencia {
 
   @@unique([marca_chave, chave])
   @@index([codigo_barras])
+  @@index([marca_chave, codigo_revista])
   @@map("produtos_referencia")
+}
+
+/// Registro de cada vez que a revendedora cobrou ou lembrou uma cliente (fila de cobrança do dia).
+model ContatoCobranca {
+  id             String   @id
+  operacao_id    String
+  cliente_id     String
+  canal          String   // "WHATSAPP" | "OUTRO"
+  motivo         String   // "ATRASADA" | "VENCE_HOJE" | "VENCE_EM_BREVE"
+  valor_centavos Int      @default(0)
+  operador_id    String
+  operador_nome  String
+  criado_em      DateTime @default(now())
+
+  operacao Operacao @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+  cliente  Cliente  @relation(fields: [cliente_id], references: [id], onDelete: Cascade)
+
+  @@index([operacao_id, criado_em])
+  @@index([cliente_id])
+  @@map("contatos_cobranca")
 }

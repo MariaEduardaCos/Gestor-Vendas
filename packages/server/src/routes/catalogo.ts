@@ -6,6 +6,8 @@ import {
   planejarImportacaoCatalogo,
   chaveProdutoCatalogo,
   normalizarTexto,
+  classificarCodigo,
+  variantesCodigoBarras,
   type LinhaCatalogo
 } from '@consultorasync/core';
 import type { PrismaClient } from '@prisma/client';
@@ -57,21 +59,29 @@ export const catalogoRoutes: FastifyPluginAsync = async (fastify) => {
           nome: p.nome,
           variante: p.variante,
           codigoBarras: p.codigo_barras,
+          codigoRevista: p.codigo_revista,
           precoVendaCentavos: p.preco_venda_centavos
         })),
         itens
       );
+
+      // Produtos da marca que vieram de um catálogo e não aparecem neste: ficam "fora do ciclo".
+      const tocados = new Set(acoes.flatMap((a) => (a.tipo === 'CRIAR' ? [] : [a.produtoId])));
+      const foraDoCiclo = existentes.filter((p) => p.ciclo_catalogo && !tocados.has(p.id));
 
       const resumo = {
         ciclo: cicloLimpo,
         novos: acoes.filter((a) => a.tipo === 'CRIAR').length,
         precos_alterados: acoes.filter((a) => a.tipo === 'ATUALIZAR_PRECO').length,
         sem_mudanca: acoes.filter((a) => a.tipo === 'SEM_MUDANCA').length,
+        fora_do_ciclo: foraDoCiclo.length,
+        fora_do_ciclo_nomes: foraDoCiclo.slice(0, 20).map((p) => (p.variante ? `${p.nome} — ${p.variante}` : p.nome)),
         acoes: acoes.map((a) => ({
           tipo: a.tipo,
           nome: a.linha.nome,
           variante: a.linha.variante,
           codigo_barras: a.linha.codigoBarras,
+          codigo_revista: a.linha.codigoRevista ?? null,
           preco_venda_centavos: a.linha.precoVendaCentavos,
           preco_anterior_centavos: a.tipo === 'ATUALIZAR_PRECO' ? a.precoAnteriorCentavos : null
         }))
@@ -92,6 +102,7 @@ export const catalogoRoutes: FastifyPluginAsync = async (fastify) => {
               nome: linha.nome,
               variante: linha.variante,
               codigoBarras: linha.codigoBarras,
+              codigoRevista: linha.codigoRevista,
               precoVendaCentavos: linha.precoVendaCentavos,
               percentualDescontoMarca: marca.percentual_padrao
             });
@@ -103,6 +114,7 @@ export const catalogoRoutes: FastifyPluginAsync = async (fastify) => {
                 nome: novo.nome,
                 variante: novo.variante,
                 codigo_barras: novo.codigoBarras,
+                codigo_revista: novo.codigoRevista,
                 preco_venda_centavos: novo.precoVendaCentavos,
                 custo_centavos: novo.custoCentavos,
                 proveniencia_custo: novo.provenienciaCusto,
@@ -116,7 +128,11 @@ export const catalogoRoutes: FastifyPluginAsync = async (fastify) => {
           if (acao.tipo === 'SEM_MUDANCA') {
             await tx.produto.updateMany({
               where: { id: atual.id, operacao_id: session.operacaoId },
-              data: { ciclo_catalogo: cicloLimpo, codigo_barras: atual.codigo_barras ?? linha.codigoBarras }
+              data: {
+                ciclo_catalogo: cicloLimpo,
+                codigo_barras: atual.codigo_barras ?? linha.codigoBarras,
+                codigo_revista: linha.codigoRevista ?? atual.codigo_revista
+              }
             });
             continue;
           }
@@ -141,6 +157,7 @@ export const catalogoRoutes: FastifyPluginAsync = async (fastify) => {
               custo_centavos: atualizado.custoCentavos,
               proveniencia_custo: atualizado.provenienciaCusto,
               codigo_barras: atualizado.codigoBarras,
+              codigo_revista: linha.codigoRevista ?? atual.codigo_revista,
               ciclo_catalogo: cicloLimpo
             }
           });
@@ -196,6 +213,7 @@ export const catalogoRoutes: FastifyPluginAsync = async (fastify) => {
         quantidade: refs.length,
         itens: refs.map((r) => ({
           codigoBarras: r.codigo_barras,
+          codigoRevista: r.codigo_revista,
           nome: r.nome,
           variante: r.variante,
           precoVendaCentavos: r.preco_sugerido_centavos
@@ -204,20 +222,33 @@ export const catalogoRoutes: FastifyPluginAsync = async (fastify) => {
     }
   );
 
-  // GET /api/catalogo-compartilhado/codigo/:codigo — sugestão para código de barras desconhecido
+  // GET /api/catalogo-compartilhado/codigo/:codigo — sugestão para código desconhecido.
+  // Código de barras: busca em todas as marcas. Código da revista (curto, repete entre marcas):
+  // só nas marcas que esta revendedora vende.
   fastify.get<{ Params: { codigo: string } }>(
     '/api/catalogo-compartilhado/codigo/:codigo',
     { preHandler: fastify.requireSession },
     async (request, reply) => {
-      const codigo = request.params.codigo.trim();
-      if (!/^\d{8,14}$/.test(codigo)) return reply.send([]);
-      const refs = await fastify.prisma.produtoReferencia.findMany({ where: { codigo_barras: codigo }, take: 5 });
+      const c = classificarCodigo(request.params.codigo);
+      let refs;
+      if (c.tipo === 'BARRAS') {
+        refs = await fastify.prisma.produtoReferencia.findMany({ where: { codigo_barras: { in: variantesCodigoBarras(c.valor) } }, take: 5 });
+      } else if (c.tipo === 'REVISTA') {
+        const marcas = await request.tenantPrisma.marca.findMany({ select: { nome: true } });
+        const chaves = marcas.map((m) => normalizarTexto(m.nome));
+        refs = chaves.length
+          ? await fastify.prisma.produtoReferencia.findMany({ where: { codigo_revista: c.valor, marca_chave: { in: chaves } }, take: 5 })
+          : [];
+      } else {
+        return reply.send([]);
+      }
       return reply.send(
         refs.map((r) => ({
           marca_nome: r.marca_nome,
           nome: r.nome,
           variante: r.variante,
           codigo_barras: r.codigo_barras,
+          codigo_revista: r.codigo_revista,
           preco_sugerido_centavos: r.preco_sugerido_centavos,
           ciclo: r.ciclo
         }))
@@ -241,12 +272,14 @@ export async function contribuirCatalogoCompartilhado(db: PrismaClient, marcaNom
         nome: l.nome,
         variante: l.variante,
         codigo_barras: l.codigoBarras,
+        codigo_revista: l.codigoRevista ?? null,
         preco_sugerido_centavos: l.precoVendaCentavos,
         ciclo
       },
       update: {
         nome: l.nome,
         variante: l.variante,
+        ...(l.codigoRevista ? { codigo_revista: l.codigoRevista } : {}),
         preco_sugerido_centavos: l.precoVendaCentavos,
         ciclo,
         contribuicoes: { increment: 1 }

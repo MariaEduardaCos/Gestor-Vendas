@@ -1,8 +1,22 @@
 import { useState, useCallback } from 'react';
+import { classificarCodigo, normalizarTexto } from '@consultorasync/core';
 import { VisorLeituraHibrido } from './VisorLeituraHibrido';
 import { PainelPareamentoDesktop } from './PainelPareamentoDesktop';
 import { ProdutoModal } from './ProdutoModal';
 import type { ProdutoDTO } from '../types/produto';
+
+interface SugestaoCompartilhada {
+  marca_nome: string;
+  nome: string;
+  variante: string | null;
+  codigo_barras: string | null;
+  codigo_revista: string | null;
+  preco_sugerido_centavos: number;
+  ciclo: string;
+}
+
+const MAX_ESCOLHAS = 10;
+const reais = (c: number) => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 interface VisorViewProps {
   sessionToken?: string;
@@ -20,14 +34,30 @@ export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorV
   const [codigoNaoCadastrado, setCodigoNaoCadastrado] = useState<string | null>(null);
   const [modalCadastroAberto, setModalCadastroAberto] = useState(false);
 
-  // Busca rápida de produto por código de barras ou nome
+  // Mais de um produto para o que foi lido/digitado: a revendedora escolhe (nada é escolhido sozinho)
+  const [escolhas, setEscolhas] = useState<{ titulo: string; produtos: ProdutoDTO[] } | null>(null);
+  const [sugestao, setSugestao] = useState<SugestaoCompartilhada | null>(null);
+
+  const selecionar = useCallback(
+    (produto: ProdutoDTO) => {
+      setEscolhas(null);
+      setUltimoProdutoLido(produto);
+      setProdutosBipados((prev) => [produto, ...prev]);
+      if (onSelecionarProdutoParaFluxo) onSelecionarProdutoParaFluxo(produto);
+    },
+    [onSelecionarProdutoParaFluxo]
+  );
+
+  // Busca por código de barras, código da revista ou nome
   const handleCodigoLido = useCallback(
     async (termoBusca: string) => {
-      const termoLimpo = termoBusca.trim();
-      if (!termoLimpo) return;
+      const c = classificarCodigo(termoBusca);
+      if (!c.valor) return;
 
       setConsultandoCodigo(true);
       setAlertaErro(null);
+      setEscolhas(null);
+      setSugestao(null);
 
       try {
         const headers: Record<string, string> = {};
@@ -35,41 +65,44 @@ export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorV
           headers['Authorization'] = `Bearer ${sessionToken}`;
         }
 
-        const ehProvavelCodigoBarras = /^\d+$/.test(termoLimpo);
-
-        // Se for puramente numérico, tenta busca direta por código de barras primeiro
-        if (ehProvavelCodigoBarras) {
-          const resCodigo = await fetch(`/api/produtos/codigo/${encodeURIComponent(termoLimpo)}`, { headers });
-          if (resCodigo.ok) {
-            const produto: ProdutoDTO = await resCodigo.json();
-            setUltimoProdutoLido(produto);
-            setProdutosBipados((prev) => [produto, ...prev]);
-            if (onSelecionarProdutoParaFluxo) onSelecionarProdutoParaFluxo(produto);
+        if (c.tipo !== 'TEXTO') {
+          const res = await fetch(`/api/produtos/por-codigo/${encodeURIComponent(c.valor)}`, { headers });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const lista: ProdutoDTO[] = await res.json();
+          if (lista.length === 1) return selecionar(lista[0]);
+          if (lista.length > 1) {
+            setEscolhas({ titulo: `O código ${c.valor} está em ${lista.length} produtos. Qual deles?`, produtos: lista });
             return;
           }
-        }
-
-        // Se não for numérico ou se a busca por código deu 404, pesquisa no catálogo por nome/termo
-        const resBusca = await fetch(`/api/produtos?busca=${encodeURIComponent(termoLimpo)}`, { headers });
-        if (resBusca.ok) {
-          const lista: ProdutoDTO[] = await resBusca.json();
-          if (lista && lista.length > 0) {
-            const produtoEncontrado = lista[0];
-            setUltimoProdutoLido(produtoEncontrado);
-            setProdutosBipados((prev) => [produtoEncontrado, ...prev]);
-            if (onSelecionarProdutoParaFluxo) onSelecionarProdutoParaFluxo(produtoEncontrado);
-            return;
+          // Não cadastrado: procura no catálogo compartilhado e oferece o cadastro (FR-008)
+          const resRef = await fetch(`/api/catalogo-compartilhado/codigo/${encodeURIComponent(c.valor)}`, { headers });
+          if (resRef.ok) {
+            const refs: SugestaoCompartilhada[] = await resRef.json();
+            setSugestao(refs[0] ?? null);
           }
+          setCodigoNaoCadastrado(c.valor);
+          return;
         }
 
-        // Se não encontrou no catálogo:
-        if (ehProvavelCodigoBarras) {
-          // Código numérico não encontrado: abre diálogo acolhedor de cadastro imediato (FR-008)
-          setCodigoNaoCadastrado(termoLimpo);
-        } else {
-          // Termo textual não encontrado: exibe aviso acolhedor sem abrir modal de código indevidamente
-          setAlertaErro(`Nenhum produto encontrado com o nome ou termo "${termoLimpo}". Tente outro termo ou cadastre um novo produto.`);
+        if (normalizarTexto(c.valor).length < 2) {
+          setAlertaErro('Digite o código ou pelo menos 2 letras do nome.');
+          return;
         }
+        const resBusca = await fetch(`/api/produtos?busca=${encodeURIComponent(c.valor)}`, { headers });
+        if (!resBusca.ok) throw new Error(`HTTP ${resBusca.status}`);
+        const lista: ProdutoDTO[] = await resBusca.json();
+        if (lista.length === 1) return selecionar(lista[0]);
+        if (lista.length > 1) {
+          setEscolhas({
+            titulo:
+              lista.length > MAX_ESCOLHAS
+                ? `${lista.length} produtos com "${c.valor}". Mostrando ${MAX_ESCOLHAS}; digite mais do nome para filtrar.`
+                : `${lista.length} produtos com "${c.valor}". Qual deles?`,
+            produtos: lista.slice(0, MAX_ESCOLHAS)
+          });
+          return;
+        }
+        setAlertaErro(`Nenhum produto encontrado com "${c.valor}". Tente outro termo ou cadastre um novo produto.`);
       } catch (err: any) {
         console.warn('Erro ao consultar produto no visor:', err);
         setAlertaErro('Erro de conexão ao buscar produto. Seus dados estão seguros.');
@@ -77,8 +110,35 @@ export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorV
         setConsultandoCodigo(false);
       }
     },
-    [sessionToken, onSelecionarProdutoParaFluxo]
+    [sessionToken, selecionar]
   );
+
+  const usarSugestao = async (s: SugestaoCompartilhada) => {
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
+      const marcas: Array<{ id: string; nome: string }> = await fetch('/api/marcas', { headers }).then((r) => (r.ok ? r.json() : []));
+      const marca = marcas.find((m) => normalizarTexto(m.nome) === normalizarTexto(s.marca_nome));
+      const res = await fetch('/api/produtos', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          marca_id: marca?.id ?? null,
+          nome: s.nome,
+          variante: s.variante,
+          codigo_barras: s.codigo_barras,
+          codigo_revista: s.codigo_revista,
+          preco_venda_centavos: s.preco_sugerido_centavos
+        })
+      });
+      const corpo = await res.json();
+      if (!res.ok) throw new Error(corpo?.detail || 'Não foi possível cadastrar o produto.');
+      setSugestao(null);
+      handleProdutoCadastradoComSucesso({ ...corpo, estoque: { presentes: 0, reservados: 0, pronta_entrega: 0 } });
+    } catch (e) {
+      setAlertaErro((e as Error).message);
+    }
+  };
 
   const handleProdutoCadastradoComSucesso = (novoProduto: ProdutoDTO) => {
     setModalCadastroAberto(false);
@@ -151,7 +211,7 @@ export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorV
           autoStart={true}
           pausado={Boolean(codigoNaoCadastrado || modalCadastroAberto)}
           emiteSom={true}
-          placeholderManual="Ex: 7891234567890 ou digite o código/nome..."
+          placeholderManual="Código de barras, da revista ou nome"
         />
       ) : (
         <PainelPareamentoDesktop
@@ -165,6 +225,42 @@ export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorV
         <div className="flex items-center justify-center gap-2 p-3 bg-surface-sunken rounded-lg text-ink-secondary text-body-md animate-pulse">
           <span className="text-lg animate-spin">⏳</span>
           <span>Consultando catálogo e estoque...</span>
+        </div>
+      )}
+
+      {/* Mais de um produto encontrado: escolher */}
+      {escolhas && (
+        <div className="bg-surface-raised border-2 border-status-reserved rounded-lg p-4 shadow-sm flex flex-col gap-2">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-body-md font-semibold text-ink-primary">{escolhas.titulo}</p>
+            <button type="button" onClick={() => setEscolhas(null)} className="text-meta font-semibold text-ink-secondary min-h-[36px] px-2">
+              Fechar
+            </button>
+          </div>
+          <ul className="flex flex-col gap-1" aria-label="Produtos encontrados">
+            {escolhas.produtos.map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onClick={() => selecionar(p)}
+                  className="w-full text-left min-h-[48px] px-3 py-2 rounded-md bg-surface-sunken hover:bg-brand-subtle flex items-center gap-3"
+                >
+                  <span className="flex-1 min-w-0">
+                    <span className="block font-semibold truncate">
+                      {p.nome}
+                      {p.variante ? ` (${p.variante})` : ''}
+                    </span>
+                    <span className="block text-meta text-ink-muted truncate">
+                      {[p.marca_nome, p.codigo_revista && `revista ${p.codigo_revista}`, p.fora_do_ciclo && 'fora do ciclo atual', `${p.estoque?.pronta_entrega ?? 0} livres`]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                  </span>
+                  <span className="text-label-strong tabular-nums">{p.preco_venda_formatado}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -183,6 +279,12 @@ export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorV
               {ultimoProdutoLido.marca_nome && (
                 <p className="text-meta text-ink-secondary font-medium">
                   Marca: {ultimoProdutoLido.marca_nome}
+                  {ultimoProdutoLido.ciclo_catalogo ? ` · ${ultimoProdutoLido.ciclo_catalogo}` : ''}
+                </p>
+              )}
+              {ultimoProdutoLido.fora_do_ciclo && (
+                <p className="mt-1 inline-block text-meta font-semibold px-2 py-0.5 rounded bg-status-reserved-bg text-status-reserved">
+                  Fora do ciclo atual: confira o preço na revista nova
                 </p>
               )}
             </div>
@@ -217,7 +319,10 @@ export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorV
           </div>
 
           <div className="flex items-center justify-between text-meta text-ink-muted pt-1">
-            <span>Código: {ultimoProdutoLido.codigo_barras || 'Sem código'}</span>
+            <span>
+              Código: {ultimoProdutoLido.codigo_barras || 'sem código de barras'}
+              {ultimoProdutoLido.codigo_revista ? ` · revista ${ultimoProdutoLido.codigo_revista}` : ''}
+            </span>
             <span>Custo: {ultimoProdutoLido.custo_formatado}</span>
           </div>
         </div>
@@ -251,7 +356,7 @@ export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorV
                     {item.variante ? ` (${item.variante})` : ''}
                   </p>
                   <p className="text-meta text-ink-muted">
-                    {item.codigo_barras ? `EAN: ${item.codigo_barras}` : 'Manual'} • {item.preco_venda_formatado}
+                    {item.codigo_barras ? `EAN: ${item.codigo_barras}` : item.codigo_revista ? `Revista: ${item.codigo_revista}` : 'Manual'} • {item.preco_venda_formatado}
                   </p>
                 </div>
                 <div className="text-right shrink-0">
@@ -278,25 +383,55 @@ export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorV
                 Produto Não Cadastrado
               </h3>
               <p className="text-body-md text-ink-secondary mt-1 leading-relaxed">
-                O código de barras <span className="font-mono font-bold text-ink-primary">{codigoNaoCadastrado}</span> ainda não consta no seu catálogo.
+                O {classificarCodigo(codigoNaoCadastrado).tipo === 'REVISTA' ? 'código da revista' : 'código de barras'}{' '}
+                <span className="font-mono font-bold text-ink-primary">{codigoNaoCadastrado}</span> ainda não consta no seu catálogo.
               </p>
-              <p className="text-meta text-ink-muted mt-2">
-                Deseja cadastrar esse novo produto agora com o código já preenchido?
-              </p>
+              {!sugestao && (
+                <p className="text-meta text-ink-muted mt-2">
+                  Deseja cadastrar esse novo produto agora com o código já preenchido?
+                </p>
+              )}
             </div>
 
+            {sugestao && (
+              <div className="p-3 rounded-md border border-status-available bg-status-available-bg text-body-md">
+                <p className="text-meta text-status-available font-semibold">Encontrado no catálogo compartilhado</p>
+                <p className="font-semibold text-ink-primary">
+                  {sugestao.nome}
+                  {sugestao.variante ? ` — ${sugestao.variante}` : ''}
+                </p>
+                <p className="text-meta text-ink-secondary">
+                  {sugestao.marca_nome} · {reais(sugestao.preco_sugerido_centavos)} · {sugestao.ciclo}
+                </p>
+              </div>
+            )}
+
             <div className="flex flex-col gap-2 pt-2">
+              {sugestao && (
+                <button
+                  type="button"
+                  onClick={() => usarSugestao(sugestao)}
+                  className="min-h-touch-target bg-status-available text-ink-inverse font-bold text-label-strong rounded-md"
+                >
+                  Usar este produto
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setModalCadastroAberto(true)}
-                className="min-h-touch-target bg-brand-primary hover:bg-brand-hover text-ink-inverse font-bold text-label-strong rounded-md flex items-center justify-center gap-2 shadow-sm transition-colors"
+                className={`min-h-touch-target font-bold text-label-strong rounded-md flex items-center justify-center gap-2 shadow-sm transition-colors ${
+                  sugestao ? 'border border-border-strong text-ink-primary hover:bg-surface-sunken' : 'bg-brand-primary hover:bg-brand-hover text-ink-inverse'
+                }`}
               >
-                <span>+</span> Cadastrar Produto Agora
+                <span>+</span> {sugestao ? 'Cadastrar outro produto' : 'Cadastrar Produto Agora'}
               </button>
 
               <button
                 type="button"
-                onClick={() => setCodigoNaoCadastrado(null)}
+                onClick={() => {
+                  setCodigoNaoCadastrado(null);
+                  setSugestao(null);
+                }}
                 className="min-h-touch-target bg-surface-sunken hover:bg-border-hairline text-ink-secondary font-semibold text-label-strong rounded-md transition-colors"
               >
                 Continuar sem Cadastrar

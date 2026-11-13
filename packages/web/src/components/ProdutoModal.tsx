@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { classificarCodigo } from '@consultorasync/core';
 import type { ProdutoDTO, MarcaDTO } from '../types/produto';
 
 interface ProdutoModalProps {
@@ -25,6 +26,7 @@ export function ProdutoModal({
   const [nome, setNome] = useState('');
   const [variante, setVariante] = useState('');
   const [codigoBarras, setCodigoBarras] = useState('');
+  const [codigoRevista, setCodigoRevista] = useState('');
   const [precoVendaReais, setPrecoVendaReais] = useState('');
   const [informarCustoManual, setInformarCustoManual] = useState(false);
   const [custoManualReais, setCustoManualReais] = useState('');
@@ -59,6 +61,7 @@ export function ProdutoModal({
         setNome(produtoParaEditar.nome);
         setVariante(produtoParaEditar.variante || '');
         setCodigoBarras(produtoParaEditar.codigo_barras || '');
+        setCodigoRevista(produtoParaEditar.codigo_revista || '');
         setPrecoVendaReais((produtoParaEditar.preco_venda_centavos / 100).toFixed(2).replace('.', ','));
 
         if (produtoParaEditar.proveniencia_custo === 'INFORMADO_MANUAL' && produtoParaEditar.custo_centavos !== null) {
@@ -72,7 +75,10 @@ export function ProdutoModal({
         setMarcaId('');
         setNome('');
         setVariante('');
-        setCodigoBarras(codigoPrePreenchido || '');
+        // Código curto lido/digitado é o da revista; longo é o de barras.
+        const pre = classificarCodigo(codigoPrePreenchido);
+        setCodigoBarras(pre.tipo === 'BARRAS' ? pre.valor : '');
+        setCodigoRevista(pre.tipo === 'REVISTA' ? pre.valor : '');
         setPrecoVendaReais('');
         setInformarCustoManual(false);
         setCustoManualReais('');
@@ -153,6 +159,7 @@ export function ProdutoModal({
       nome: nome.trim(),
       variante: variante.trim() ? variante.trim() : null,
       codigo_barras: codigoBarras.trim() ? codigoBarras.trim() : null,
+      codigo_revista: codigoRevista.trim() ? codigoRevista.trim() : null,
       preco_venda_centavos: precoVendaCentavos
     };
 
@@ -290,11 +297,29 @@ export function ProdutoModal({
               </label>
               <input
                 type="text"
+                inputMode="numeric"
                 placeholder="Ex: 7891234567890"
                 value={codigoBarras}
                 onChange={(e) => setCodigoBarras(e.target.value)}
                 className="w-full min-h-touch-target px-3 border border-border-strong rounded-md bg-surface-raised text-ink-primary text-body-md focus:outline-brand-primary"
               />
+              <span className="text-[12px] text-ink-muted">O da embalagem, lido pela câmera</span>
+            </div>
+
+            <div>
+              <label htmlFor="codigo-revista" className="block text-meta text-ink-secondary font-semibold mb-1">
+                Código da Revista (Opcional)
+              </label>
+              <input
+                id="codigo-revista"
+                type="text"
+                inputMode="numeric"
+                placeholder="Ex: 71612"
+                value={codigoRevista}
+                onChange={(e) => setCodigoRevista(e.target.value)}
+                className="w-full min-h-touch-target px-3 border border-border-strong rounded-md bg-surface-raised text-ink-primary text-body-md focus:outline-brand-primary"
+              />
+              <span className="text-[12px] text-ink-muted">O número do catálogo do ciclo, usado no pedido à marca</span>
             </div>
           </div>
 

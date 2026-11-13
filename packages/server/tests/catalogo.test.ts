@@ -112,7 +112,7 @@ describe('Catálogo da marca: prévia e atualização dos produtos pelo ciclo', 
 
     const ref = (await app.inject({ method: 'GET', url: `/api/marcas/${marcaB}/catalogo-compartilhado`, headers: auth(tokenB) })).json();
     expect(ref).toMatchObject({ ciclo: 'Ciclo 17/2026', quantidade: 2 });
-    expect(Object.keys(ref.itens[0]).sort()).toEqual(['codigoBarras', 'nome', 'precoVendaCentavos', 'variante']);
+    expect(Object.keys(ref.itens[0]).sort()).toEqual(['codigoBarras', 'codigoRevista', 'nome', 'precoVendaCentavos', 'variante']);
 
     const aplicar = await app.inject({
       method: 'POST',

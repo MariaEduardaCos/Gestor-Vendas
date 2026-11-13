@@ -255,11 +255,27 @@ export function ProdutosView({ sessionToken, refreshTrigger }: ProdutosViewProps
                   </div>
                 </div>
 
-                {/* Código de barras se houver */}
-                {p.codigo_barras && (
-                  <div className="text-meta text-ink-muted flex items-center gap-1">
-                    <span>EAN:</span>
-                    <span className="font-mono">{p.codigo_barras}</span>
+                {/* Códigos e situação no catálogo do ciclo */}
+                {(p.codigo_barras || p.codigo_revista || p.fora_do_ciclo) && (
+                  <div className="text-meta text-ink-muted flex flex-wrap items-center gap-x-3 gap-y-1">
+                    {p.codigo_revista && (
+                      <span>
+                        Revista: <span className="font-mono">{p.codigo_revista}</span>
+                      </span>
+                    )}
+                    {p.codigo_barras && (
+                      <span>
+                        EAN: <span className="font-mono">{p.codigo_barras}</span>
+                      </span>
+                    )}
+                    {p.fora_do_ciclo && (
+                      <span
+                        className="px-2 py-0.5 rounded bg-status-reserved-bg text-status-reserved font-semibold"
+                        title={`Último catálogo em que apareceu: ${p.ciclo_catalogo}`}
+                      >
+                        Fora do ciclo atual
+                      </span>
+                    )}
                   </div>
                 )}
 

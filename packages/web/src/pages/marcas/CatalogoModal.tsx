@@ -8,6 +8,9 @@ interface Previa {
   novos: number;
   precos_alterados: number;
   sem_mudanca: number;
+  /** Produtos da marca que vieram de catálogos anteriores e não estão neste. */
+  fora_do_ciclo?: number;
+  fora_do_ciclo_nomes?: string[];
   aplicado: boolean;
   acoes: Array<{
     tipo: 'CRIAR' | 'ATUALIZAR_PRECO' | 'SEM_MUDANCA';
@@ -24,8 +27,9 @@ interface Props {
   onAplicado: (resumo: Previa) => void;
 }
 
-const EXEMPLO = `7891033000011;Hidratante Tododia;Algodão 400ml;59,90
-Perfume Essencial;100ml;199,90
+const EXEMPLO = `71612;Hidratante Tododia;Algodão 400ml;59,90
+71613;7891033000028;Sabonete Ekos;Castanha;12,50
+7891033000011;Perfume Essencial;100ml;199,90
 Batom Una;39,90`;
 
 /**
@@ -152,7 +156,9 @@ export function CatalogoModal({ marca, onClose, onAplicado }: Props) {
                 <span className="text-label-strong">Lista de produtos</span>
                 <span className="text-meta text-ink-secondary">
                   Uma linha por produto, colunas separadas por ponto e vírgula ou copiadas de uma planilha:
-                  <strong> código; nome; variante; preço</strong>. Código e variante podem ficar de fora.
+                  <strong> código; nome; variante; preço</strong>. O código pode ser o da revista (3 a 7 números) ou o de
+                  barras (8 a 14); para informar os dois, use <strong>código da revista; código de barras; nome; variante; preço</strong>.
+                  Código e variante podem ficar de fora.
                 </span>
                 <textarea
                   value={texto}
@@ -174,6 +180,20 @@ export function CatalogoModal({ marca, onClose, onAplicado }: Props) {
                 <Contagem rotulo="Preço mudou" valor={previa.precos_alterados} cor="text-status-reserved" />
                 <Contagem rotulo="Sem mudança" valor={previa.sem_mudanca} cor="text-ink-secondary" />
               </div>
+              {(previa.fora_do_ciclo ?? 0) > 0 && (
+                <div className="p-3 rounded-md bg-surface-sunken text-meta text-ink-secondary">
+                  <p>
+                    <strong className="text-ink-primary">{previa.fora_do_ciclo} produto(s)</strong> de ciclos anteriores não estão nesta lista. Eles
+                    continuam cadastrados (com estoque e preço antigos) e vão aparecer como <strong>fora do ciclo atual</strong>.
+                  </p>
+                  {previa.fora_do_ciclo_nomes && previa.fora_do_ciclo_nomes.length > 0 && (
+                    <p className="mt-1 text-ink-muted">
+                      {previa.fora_do_ciclo_nomes.join(', ')}
+                      {(previa.fora_do_ciclo ?? 0) > previa.fora_do_ciclo_nomes.length ? '…' : ''}
+                    </p>
+                  )}
+                </div>
+              )}
               {alterados.length > 0 && (
                 <ul className="divide-y divide-border-hairline border border-border-hairline rounded-md max-h-64 overflow-y-auto">
                   {alterados.map((a, i) => (
@@ -204,7 +224,7 @@ export function CatalogoModal({ marca, onClose, onAplicado }: Props) {
             <label className="flex items-start gap-2 text-meta text-ink-secondary">
               <input type="checkbox" checked={compartilhar} onChange={(e) => setCompartilhar(e.target.checked)} className="mt-0.5 w-4 h-4 accent-brand-primary" />
               <span>
-                Compartilhar esta lista com outras revendedoras da marca (só nome, variante, código de barras e preço da revista — nunca clientes, estoque ou custos).
+                Compartilhar esta lista com outras revendedoras da marca (só nome, variante, códigos e preço da revista — nunca clientes, estoque ou custos).
               </span>
             </label>
           )}

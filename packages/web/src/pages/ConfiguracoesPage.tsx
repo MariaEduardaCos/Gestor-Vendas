@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSessao } from '../app/SessaoContext';
 import { useAcoes } from '../app/AcoesContext';
 import { apiFetch, baixarArquivo } from '../lib/api';
+import { useInstalacaoApp } from '../lib/pwa';
 import { Botao, CabecalhoPagina, Cartao } from '../layout/ui';
 
 const classeCampo =
@@ -209,6 +210,49 @@ function CartaoExportacao() {
   );
 }
 
+/** Instalar o sistema como app no celular ou no computador (PWA). */
+function CartaoInstalar() {
+  const { situacao, instalar } = useInstalacaoApp();
+  const { avisar } = useAcoes();
+
+  return (
+    <Cartao className="p-5 flex flex-col gap-3">
+      <div>
+        <h3 className="text-title-md font-bold">App no celular</h3>
+        <p className="text-body-md text-ink-secondary">
+          Instale o ConsultoraSync para abrir pelo ícone na tela inicial, em tela cheia, como um aplicativo. Sem internet, ele mostra os últimos dados que você viu.
+        </p>
+      </div>
+      {situacao === 'instalado' && (
+        <p className="p-2 rounded-md bg-status-available-bg text-status-available text-meta font-semibold">Você está usando o app instalado.</p>
+      )}
+      {situacao === 'disponivel' && (
+        <div>
+          <Botao
+            onClick={async () => {
+              if (await instalar()) avisar('App instalado. Procure o ícone na tela inicial.');
+            }}
+          >
+            Instalar app
+          </Botao>
+        </div>
+      )}
+      {situacao === 'ios' && (
+        <ol className="list-decimal pl-5 text-body-md text-ink-secondary flex flex-col gap-1">
+          <li>Abra este endereço no Safari.</li>
+          <li>Toque em <strong>Compartilhar</strong> (o quadrado com a seta para cima).</li>
+          <li>Escolha <strong>Adicionar à Tela de Início</strong>.</li>
+        </ol>
+      )}
+      {situacao === 'indisponivel' && (
+        <p className="text-meta text-ink-muted">
+          No celular Android, abra no Chrome e use o menu <strong>⋮ → Instalar app</strong>. No computador, procure o ícone de instalar na barra de endereço. O endereço precisa ser seguro (https).
+        </p>
+      )}
+    </Cartao>
+  );
+}
+
 export function ConfiguracoesPage() {
   const navegar = useNavigate();
 
@@ -225,6 +269,8 @@ export function ConfiguracoesPage() {
             <Botao variante="secundario" onClick={() => navegar('/marcas')}>Abrir marcas e catálogos</Botao>
           </div>
         </Cartao>
+
+        <CartaoInstalar />
 
         <CartaoExportacao />
       </div>

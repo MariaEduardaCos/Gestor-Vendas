@@ -1,6 +1,23 @@
 import { gerarUuidV7 } from '../value-objects/uuid.js';
 import { Centavos } from '../value-objects/centavos.js';
 import { badRequestError } from '../errors/problem-details.js';
+import { limparCodigoRevista } from './codigo-produto.js';
+
+/** Código de barras como digitado, sem espaços/pontos/traços quando for só número. */
+function normalizarCodigoBarras(valor: string | null | undefined): string | null {
+  const aparado = (valor ?? '').trim();
+  if (!aparado) return null;
+  const numeros = aparado.replace(/[\s.\-/]/g, '');
+  return /^\d+$/.test(numeros) ? numeros : aparado;
+}
+
+/** Código da revista (3 a 7 números) ou null; outro formato é recusado. */
+function normalizarCodigoRevista(valor: string | null | undefined): string | null {
+  if (!valor || !valor.trim()) return null;
+  const limpo = limparCodigoRevista(valor);
+  if (!limpo) throw badRequestError('O código da revista deve ter de 3 a 7 números.');
+  return limpo;
+}
 
 export type ProvenienciaCusto = 'INFORMADO_MANUAL' | 'ESTIMADO_PERCENTUAL' | 'DESCONHECIDO';
 
@@ -11,6 +28,7 @@ export interface ProdutoProps {
   nome: string;
   variante?: string | null;
   codigoBarras?: string | null;
+  codigoRevista?: string | null;
   precoVendaCentavos: number;
   custoCentavos?: number | null;
   provenienciaCusto?: ProvenienciaCusto;
@@ -27,6 +45,7 @@ export class Produto {
   public nome: string;
   public variante: string | null;
   public codigoBarras: string | null;
+  public codigoRevista: string | null;
   public precoVendaCentavos: number;
   public custoCentavos: number | null;
   public provenienciaCusto: ProvenienciaCusto;
@@ -80,7 +99,8 @@ export class Produto {
     this.marcaId = props.marcaId && props.marcaId.trim().length > 0 ? props.marcaId.trim() : null;
     this.nome = props.nome.trim();
     this.variante = props.variante && props.variante.trim().length > 0 ? props.variante.trim() : null;
-    this.codigoBarras = props.codigoBarras && props.codigoBarras.trim().length > 0 ? props.codigoBarras.trim() : null;
+    this.codigoBarras = normalizarCodigoBarras(props.codigoBarras);
+    this.codigoRevista = normalizarCodigoRevista(props.codigoRevista);
     this.precoVendaCentavos = props.precoVendaCentavos;
     this.custoCentavos = custoFinal;
     this.provenienciaCusto = provenienciaFinal;
@@ -144,6 +164,7 @@ export class Produto {
     marcaId?: string | null;
     variante?: string | null;
     codigoBarras?: string | null;
+    codigoRevista?: string | null;
     precoVendaCentavos?: number;
     custoManualCentavos?: number | null;
     percentualDescontoMarca?: number | null;
@@ -166,7 +187,11 @@ export class Produto {
     }
 
     if (dados.codigoBarras !== undefined) {
-      this.codigoBarras = dados.codigoBarras && dados.codigoBarras.trim().length > 0 ? dados.codigoBarras.trim() : null;
+      this.codigoBarras = normalizarCodigoBarras(dados.codigoBarras);
+    }
+
+    if (dados.codigoRevista !== undefined) {
+      this.codigoRevista = normalizarCodigoRevista(dados.codigoRevista);
     }
 
     const precoAnterior = this.precoVendaCentavos;
@@ -245,6 +270,7 @@ export class Produto {
       nome: this.nome,
       variante: this.variante,
       codigoBarras: this.codigoBarras,
+      codigoRevista: this.codigoRevista,
       precoVendaCentavos: this.precoVendaCentavos,
       precoVendaFormatado: this.precoVendaFormatado,
       custoCentavos: this.custoCentavos,

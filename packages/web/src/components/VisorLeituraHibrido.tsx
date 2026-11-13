@@ -183,8 +183,9 @@ export function VisorLeituraHibrido({
     };
   }, [autoStart, pausado, iniciarScanner, pararScanner]);
 
-  const handleSubmitManual = (e: React.FormEvent) => {
-    e.preventDefault();
+  // Sem <form>: o leitor fica dentro dos formulários de venda e encomenda, e um formulário
+  // dentro de outro fazia o Enter recarregar a página ou enviar a venda.
+  const handleSubmitManual = () => {
     const codigoLimpo = codigoManual.trim();
     if (!codigoLimpo) return;
 
@@ -294,24 +295,33 @@ export function VisorLeituraHibrido({
         <label htmlFor="input-leitura-manual" className="text-label-strong text-ink-primary block">
           Digitação Manual ou Leitor Externo:
         </label>
-        <form onSubmit={handleSubmitManual} className="flex gap-2">
+        <div className="flex gap-2">
           <input
             id="input-leitura-manual"
             ref={inputManualRef}
             type="text"
+            enterKeyHint="search"
             value={codigoManual}
             onChange={(e) => setCodigoManual(e.target.value)}
+            onKeyDown={(e) => {
+              // Leitor USB "digita" o código e aperta Enter
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSubmitManual();
+              }
+            }}
             placeholder={placeholderManual}
             className="flex-1 min-h-touch-target px-3.5 py-2.5 rounded-md border border-border-strong bg-surface-base text-ink-primary text-body-md focus:outline-none focus:ring-2 focus:ring-brand-primary/40 focus:border-brand-primary shadow-inner"
           />
           <button
-            type="submit"
+            type="button"
+            onClick={handleSubmitManual}
             disabled={!codigoManual.trim()}
             className="min-h-touch-target px-4 bg-brand-primary hover:bg-brand-hover disabled:opacity-50 text-ink-inverse font-bold text-label-strong rounded-md transition-colors shadow-sm flex items-center justify-center shrink-0"
           >
             Buscar
           </button>
-        </form>
+        </div>
         <p className="text-meta text-ink-muted">
           Dica: Você também pode usar um leitor USB ou sem fio pareado.
         </p>

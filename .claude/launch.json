@@ -4,14 +4,37 @@
     {
       "name": "api",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-c", "cd packages/server && NODE_ENV=development node dist/index.js"],
+      "runtimeArgs": [
+        "-c",
+        "cd packages/server && NODE_ENV=development node dist/index.js"
+      ],
       "port": 3333
     },
     {
       "name": "web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "packages/web", "run", "dev"],
+      "runtimeArgs": [
+        "--prefix",
+        "packages/web",
+        "run",
+        "dev"
+      ],
       "port": 3000
+    },
+    {
+      "name": "web-producao",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "packages/web",
+        "run",
+        "preview",
+        "--",
+        "--port",
+        "4173",
+        "--strictPort"
+      ],
+      "port": 4173
     }
   ]
 }

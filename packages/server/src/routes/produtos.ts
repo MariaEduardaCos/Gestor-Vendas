@@ -4,14 +4,37 @@ import {
   Centavos,
   gerarUuidV7,
   createProblemDetails,
+  classificarCodigo,
+  variantesCodigoBarras,
   type ProvenienciaCusto
 } from '@consultorasync/core';
+
+/**
+ * Situação do produto frente ao catálogo da marca: "fora do ciclo" quando veio de um catálogo
+ * anterior e não apareceu no último carregado (produto cadastrado à mão não é marcado).
+ */
+function infoCiclo(p: { ciclo_catalogo: string | null; marca?: { catalogo_ciclo: string | null } | null }) {
+  const cicloMarca = p.marca?.catalogo_ciclo ?? null;
+  return {
+    ciclo_catalogo: p.ciclo_catalogo,
+    fora_do_ciclo: !!(p.ciclo_catalogo && cicloMarca && p.ciclo_catalogo !== cicloMarca)
+  };
+}
+
+/** Filtro do Prisma para um código digitado: de barras (formas equivalentes) ou da revista. */
+function filtroPorCodigo(entrada: string) {
+  const c = classificarCodigo(entrada);
+  if (c.tipo === 'BARRAS') return { codigo_barras: { in: variantesCodigoBarras(c.valor) } };
+  if (c.tipo === 'REVISTA') return { codigo_revista: c.valor };
+  return null;
+}
 
 interface ProdutoBody {
   marca_id?: string | null;
   nome: string;
   variante?: string | null;
   codigo_barras?: string | null;
+  codigo_revista?: string | null;
   preco_venda_centavos: number;
   custo_manual_centavos?: number | null;
   custo_centavos?: number | null;
@@ -36,6 +59,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
         nome,
         variante,
         codigo_barras,
+        codigo_revista,
         preco_venda_centavos,
         custo_manual_centavos,
         custo_centavos,
@@ -75,6 +99,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
           nome,
           variante,
           codigoBarras: codigo_barras,
+          codigoRevista: codigo_revista,
           precoVendaCentavos: preco_venda_centavos,
           custoManualCentavos: custo_manual_centavos,
           percentualDescontoMarca: marcaPercentualPadrao,
@@ -98,6 +123,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
           nome: produtoDomain.nome,
           variante: produtoDomain.variante,
           codigo_barras: produtoDomain.codigoBarras,
+          codigo_revista: produtoDomain.codigoRevista,
           preco_venda_centavos: produtoDomain.precoVendaCentavos,
           custo_centavos: produtoDomain.custoCentavos,
           proveniencia_custo: produtoDomain.provenienciaCusto,
@@ -130,6 +156,8 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
         nome: produto.nome,
         variante: produto.variante,
         codigo_barras: produto.codigo_barras,
+        codigo_revista: produto.codigo_revista,
+        ...infoCiclo(produto),
         preco_venda_centavos: produto.preco_venda_centavos,
         preco_venda_formatado: produtoDomain.precoVendaFormatado,
         custo_centavos: produto.custo_centavos,
@@ -153,7 +181,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
       const whereClause: any = {};
 
       if (codigoBarras && codigoBarras.length > 0) {
-        whereClause.codigo_barras = codigoBarras;
+        Object.assign(whereClause, filtroPorCodigo(codigoBarras) ?? { codigo_barras: codigoBarras });
       }
 
       if (marcaId && marcaId.length > 0) {
@@ -161,11 +189,15 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       if (termo.length > 0) {
+        const porCodigo = filtroPorCodigo(termo);
+        const soNumeros = termo.replace(/[\s.\-/]/g, '');
         whereClause.OR = [
           { nome: { contains: termo } },
           { variante: { contains: termo } },
-          { codigo_barras: { contains: termo } },
-          { marca: { nome: { contains: termo } } }
+          { codigo_barras: { contains: /^\d+$/.test(soNumeros) ? soNumeros : termo } },
+          { codigo_revista: { contains: /^\d+$/.test(soNumeros) ? soNumeros : termo } },
+          { marca: { nome: { contains: termo } } },
+          ...(porCodigo ? [porCodigo] : [])
         ];
       }
 
@@ -203,6 +235,8 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
             nome: p.nome,
             variante: p.variante,
             codigo_barras: p.codigo_barras,
+            codigo_revista: p.codigo_revista,
+            ...infoCiclo(p),
             preco_venda_centavos: p.preco_venda_centavos,
             preco_venda_formatado: precoFormatado,
             custo_centavos: p.custo_centavos,
@@ -217,23 +251,69 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
     }
   );
 
-  // GET /api/produtos/codigo/:codigo - Busca direta por código de barras (milissegundos)
+  // GET /api/produtos/por-codigo/:codigo - Todos os produtos com este código de barras ou da revista
+  // (o código da revista pode se repetir entre marcas; a tela mostra a lista para escolher)
+  fastify.get<{ Params: { codigo: string } }>(
+    '/api/produtos/por-codigo/:codigo',
+    { preHandler: fastify.requireSession },
+    async (request, reply) => {
+      const filtro = filtroPorCodigo(request.params.codigo || '');
+      if (!filtro) return reply.send([]);
+      const produtos = await request.tenantPrisma.produto.findMany({
+        where: filtro,
+        include: { marca: true, itens_estoque: true },
+        orderBy: [{ nome: 'asc' }, { variante: 'asc' }],
+        take: 20
+      });
+      return reply.send(
+        produtos.map((p) => {
+          const estoqueItem = p.itens_estoque?.[0];
+          return {
+            id: p.id,
+            operacao_id: p.operacao_id,
+            marca_id: p.marca_id,
+            marca_nome: p.marca?.nome ?? null,
+            nome: p.nome,
+            variante: p.variante,
+            codigo_barras: p.codigo_barras,
+            codigo_revista: p.codigo_revista,
+            ...infoCiclo(p),
+            preco_venda_centavos: p.preco_venda_centavos,
+            preco_venda_formatado: Centavos.deInteiro(p.preco_venda_centavos).paraFormatado(),
+            custo_centavos: p.custo_centavos,
+            custo_formatado: p.custo_centavos !== null ? Centavos.deInteiro(p.custo_centavos).paraFormatado() : 'Desconhecido',
+            proveniencia_custo: p.proveniencia_custo,
+            estoque: {
+              presentes: estoqueItem?.presentes ?? 0,
+              reservados: estoqueItem?.reservados ?? 0,
+              pronta_entrega: estoqueItem?.pronta_entrega ?? 0
+            },
+            criado_em: p.criado_em.toISOString(),
+            atualizado_em: p.atualizado_em.toISOString()
+          };
+        })
+      );
+    }
+  );
+
+  // GET /api/produtos/codigo/:codigo - Busca direta por código de barras ou da revista (primeiro encontrado)
   fastify.get<{ Params: { codigo: string } }>(
     '/api/produtos/codigo/:codigo',
     { preHandler: fastify.requireSession },
     async (request, reply) => {
       const { codigo } = request.params;
       const codigoNormalizado = (codigo || '').trim();
+      const filtro = filtroPorCodigo(codigoNormalizado);
 
-      const produto = await request.tenantPrisma.produto.findFirst({
-        where: {
-          codigo_barras: codigoNormalizado
-        },
-        include: {
-          marca: true,
-          itens_estoque: true
-        }
-      });
+      const produto = filtro
+        ? await request.tenantPrisma.produto.findFirst({
+            where: filtro,
+            include: {
+              marca: true,
+              itens_estoque: true
+            }
+          })
+        : null;
 
       if (!produto) {
         return reply.status(404).type('application/problem+json').send(
@@ -241,7 +321,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
             404,
             'NOT_FOUND',
             'Produto Não Encontrado',
-            `Nenhum produto cadastrado com o código de barras '${codigoNormalizado}' nesta operação.`
+            `Nenhum produto cadastrado com o código '${codigoNormalizado}' nesta operação.`
           )
         );
       }
@@ -266,6 +346,8 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
         nome: produto.nome,
         variante: produto.variante,
         codigo_barras: produto.codigo_barras,
+        codigo_revista: produto.codigo_revista,
+        ...infoCiclo(produto),
         preco_venda_centavos: produto.preco_venda_centavos,
         preco_venda_formatado: precoFormatado,
         custo_centavos: produto.custo_centavos,
@@ -316,6 +398,8 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
         nome: produto.nome,
         variante: produto.variante,
         codigo_barras: produto.codigo_barras,
+        codigo_revista: produto.codigo_revista,
+        ...infoCiclo(produto),
         preco_venda_centavos: produto.preco_venda_centavos,
         preco_venda_formatado: precoFormatado,
         custo_centavos: produto.custo_centavos,
@@ -338,6 +422,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
         nome,
         variante,
         codigo_barras,
+        codigo_revista,
         preco_venda_centavos,
         custo_manual_centavos,
         custo_centavos,
@@ -398,12 +483,15 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
           nome: existente.nome,
           variante: existente.variante,
           codigoBarras: existente.codigo_barras,
+          codigoRevista: existente.codigo_revista,
           precoVendaCentavos: existente.preco_venda_centavos,
           custoCentavos: existente.custo_centavos,
           provenienciaCusto: existente.proveniencia_custo as ProvenienciaCusto,
           criadoEm: existente.criado_em.toISOString(),
           atualizadoEm: existente.atualizado_em.toISOString()
         });
+
+        if (codigo_revista !== undefined) produtoDomain.atualizar({ codigoRevista: codigo_revista });
 
         const novoPreco = preco_venda_centavos ?? existente.preco_venda_centavos;
 
@@ -496,6 +584,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
           marca_id: produtoDomain.marcaId,
           variante: produtoDomain.variante,
           codigo_barras: produtoDomain.codigoBarras,
+          codigo_revista: produtoDomain.codigoRevista,
           preco_venda_centavos: produtoDomain.precoVendaCentavos,
           custo_centavos: produtoDomain.custoCentavos,
           proveniencia_custo: produtoDomain.provenienciaCusto,
@@ -527,6 +616,8 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
         nome: atualizado.nome,
         variante: atualizado.variante,
         codigo_barras: atualizado.codigo_barras,
+        codigo_revista: atualizado.codigo_revista,
+        ...infoCiclo(atualizado),
         preco_venda_centavos: atualizado.preco_venda_centavos,
         preco_venda_formatado: produtoDomain.precoVendaFormatado,
         custo_centavos: atualizado.custo_centavos,

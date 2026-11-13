@@ -147,3 +147,120 @@ export function linkWhatsApp(telefone: string | null | undefined, mensagem: stri
   const comDdi = digitos.length <= 11 ? `55${digitos}` : digitos;
   return `https://wa.me/${comDdi}?text=${encodeURIComponent(mensagem)}`;
 }
+
+// ---------------------------------------------------------------------------
+// Fila de cobrança do dia: uma linha por cliente, juntando todas as contas dela.
+// ---------------------------------------------------------------------------
+
+export type MotivoFilaCobranca = 'ATRASADA' | 'VENCE_HOJE' | 'VENCE_EM_BREVE';
+
+export interface ContaParaFila {
+  id: string;
+  cliente_id: string;
+  valor_total: number;
+  total_pago: number;
+  vencimentos: string[];
+}
+
+export interface ItemFilaCobranca {
+  cliente_id: string;
+  motivo: MotivoFilaCobranca;
+  valor_vencido_centavos: number;
+  valor_vence_hoje_centavos: number;
+  valor_em_breve_centavos: number;
+  /** Primeiro vencimento em atraso (para a mensagem e para ordenar). */
+  vencido_desde: string | null;
+  /** Próximo vencimento dentro da janela de lembrete. */
+  proximo_vencimento: string | null;
+  dias_atraso: number;
+  saldo_centavos: number;
+  conta_ids: string[];
+}
+
+function somarDias(data: string, dias: number): string {
+  const [a, m, d] = data.split('-').map(Number);
+  return new Date(Date.UTC(a, m - 1, d + dias)).toISOString().slice(0, 10);
+}
+
+const PRIORIDADE: Record<MotivoFilaCobranca, number> = { ATRASADA: 0, VENCE_HOJE: 1, VENCE_EM_BREVE: 2 };
+
+/**
+ * Quem cobrar hoje: clientes com parcela vencida, vencendo hoje ou nos próximos `diasLembrete` dias.
+ * Ordem: atrasadas (mais dias primeiro, depois maior valor), vence hoje, vence em breve.
+ */
+export function montarFilaCobranca(contas: ContaParaFila[], hoje: string, diasLembrete = 3): ItemFilaCobranca[] {
+  const limite = somarDias(hoje, diasLembrete);
+  const porCliente = new Map<string, ItemFilaCobranca>();
+
+  for (const conta of contas) {
+    const resumo = calcularCobranca(conta, conta.vencimentos, hoje);
+    if (resumo.situacao === 'QUITADA') continue;
+
+    let vencido = 0;
+    let venceHoje = 0;
+    let emBreve = 0;
+    let vencidoDesde: string | null = null;
+    let proximo: string | null = null;
+    for (const p of resumo.parcelas) {
+      const aberto = p.valor_centavos - p.pago_centavos;
+      if (aberto <= 0) continue;
+      if (p.vencimento < hoje) {
+        vencido += aberto;
+        vencidoDesde ??= p.vencimento;
+      } else if (p.vencimento === hoje) {
+        venceHoje += aberto;
+      } else if (p.vencimento <= limite) {
+        emBreve += aberto;
+        proximo ??= p.vencimento;
+      }
+    }
+    if (vencido + venceHoje + emBreve === 0) continue;
+
+    const item = porCliente.get(conta.cliente_id) ?? {
+      cliente_id: conta.cliente_id,
+      motivo: 'VENCE_EM_BREVE' as MotivoFilaCobranca,
+      valor_vencido_centavos: 0,
+      valor_vence_hoje_centavos: 0,
+      valor_em_breve_centavos: 0,
+      vencido_desde: null,
+      proximo_vencimento: null,
+      dias_atraso: 0,
+      saldo_centavos: 0,
+      conta_ids: []
+    };
+    item.valor_vencido_centavos += vencido;
+    item.valor_vence_hoje_centavos += venceHoje;
+    item.valor_em_breve_centavos += emBreve;
+    item.saldo_centavos += resumo.saldo_centavos;
+    item.dias_atraso = Math.max(item.dias_atraso, resumo.dias_atraso);
+    if (vencidoDesde && (!item.vencido_desde || vencidoDesde < item.vencido_desde)) item.vencido_desde = vencidoDesde;
+    if (proximo && (!item.proximo_vencimento || proximo < item.proximo_vencimento)) item.proximo_vencimento = proximo;
+    item.motivo = item.valor_vencido_centavos > 0 ? 'ATRASADA' : item.valor_vence_hoje_centavos > 0 ? 'VENCE_HOJE' : 'VENCE_EM_BREVE';
+    item.conta_ids.push(conta.id);
+    porCliente.set(conta.cliente_id, item);
+  }
+
+  return [...porCliente.values()].sort(
+    (a, b) =>
+      PRIORIDADE[a.motivo] - PRIORIDADE[b.motivo] ||
+      b.dias_atraso - a.dias_atraso ||
+      (a.proximo_vencimento ?? '').localeCompare(b.proximo_vencimento ?? '') ||
+      b.valor_vencido_centavos + b.valor_vence_hoje_centavos - (a.valor_vencido_centavos + a.valor_vence_hoje_centavos)
+  );
+}
+
+/** Uma mensagem por cliente, somando todas as contas que entraram na fila. */
+export function mensagemFilaCobranca(nomeCliente: string, item: ItemFilaCobranca, formatarReais: (c: number) => string): string {
+  const primeiroNome = nomeCliente.trim().split(/\s+/)[0];
+  const br = (d: string) => d.split('-').reverse().join('/');
+  const fim = 'Se já pagou, me avisa que eu atualizo aqui. Obrigada!';
+
+  if (item.motivo === 'ATRASADA') {
+    const hoje = item.valor_vence_hoje_centavos > 0 ? `, e de ${formatarReais(item.valor_vence_hoje_centavos)} que vence hoje` : '';
+    return `Oi, ${primeiroNome}! Tudo bem? Passando para lembrar do pagamento de ${formatarReais(item.valor_vencido_centavos)} que venceu em ${br(item.vencido_desde!)}${hoje}. ${fim}`;
+  }
+  if (item.motivo === 'VENCE_HOJE') {
+    return `Oi, ${primeiroNome}! Tudo bem? Só lembrando que hoje vence o pagamento de ${formatarReais(item.valor_vence_hoje_centavos)}. ${fim}`;
+  }
+  return `Oi, ${primeiroNome}! Tudo bem? Só lembrando que no dia ${br(item.proximo_vencimento!)} vence o pagamento de ${formatarReais(item.valor_em_breve_centavos)}. Obrigada!`;
+}

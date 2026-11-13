@@ -37,15 +37,15 @@ describe('interpretarTextoCatalogo', () => {
 
     expect(erros).toEqual([]);
     expect(linhas).toEqual([
-      { codigoBarras: '7891033000011', nome: 'Hidratante Tododia', variante: 'Algodão 400ml', precoVendaCentavos: 5990 },
-      { codigoBarras: null, nome: 'Perfume Essencial', variante: '100ml', precoVendaCentavos: 19990 },
-      { codigoBarras: '7891033000028', nome: 'Sabonete Ekos', variante: null, precoVendaCentavos: 1250 },
-      { codigoBarras: null, nome: 'Batom Una', variante: null, precoVendaCentavos: 3990 }
+      { codigoBarras: '7891033000011', codigoRevista: null, nome: 'Hidratante Tododia', variante: 'Algodão 400ml', precoVendaCentavos: 5990 },
+      { codigoBarras: null, codigoRevista: null, nome: 'Perfume Essencial', variante: '100ml', precoVendaCentavos: 19990 },
+      { codigoBarras: '7891033000028', codigoRevista: null, nome: 'Sabonete Ekos', variante: null, precoVendaCentavos: 1250 },
+      { codigoBarras: null, codigoRevista: null, nome: 'Batom Una', variante: null, precoVendaCentavos: 3990 }
     ]);
   });
 
   it('aponta a linha com preço inválido ou código malformado, sem descartar as demais', () => {
-    const { linhas, erros } = interpretarTextoCatalogo('Batom;39,90\nCreme;sem preço\n123;Sabonete;x;10');
+    const { linhas, erros } = interpretarTextoCatalogo('Batom;39,90\nCreme;sem preço\n12;Sabonete;x;10');
     expect(linhas).toHaveLength(1);
     expect(erros.map((e) => e.linha)).toEqual([2, 3]);
   });
@@ -59,9 +59,9 @@ describe('planejarImportacaoCatalogo', () => {
 
   it('reconhece por código, depois por nome+variante sem acento/maiúscula, e separa novo, preço alterado e igual', () => {
     const acoes = planejarImportacaoCatalogo(existentes, [
-      { codigoBarras: '7891033000011', nome: 'Hidratante Tododia (novo nome)', variante: null, precoVendaCentavos: 5990 },
+      { codigoBarras: '7891033000011', codigoRevista: null, nome: 'Hidratante Tododia (novo nome)', variante: null, precoVendaCentavos: 5990 },
       { codigoBarras: null, nome: 'perfume  ESSENCIAL', variante: '100ML', precoVendaCentavos: 19990 },
-      { codigoBarras: null, nome: 'Batom Una', variante: null, precoVendaCentavos: 3990 }
+      { codigoBarras: null, codigoRevista: null, nome: 'Batom Una', variante: null, precoVendaCentavos: 3990 }
     ]);
 
     expect(acoes.map((a) => a.tipo)).toEqual(['SEM_MUDANCA', 'ATUALIZAR_PRECO', 'CRIAR']);
@@ -89,7 +89,7 @@ describe('MARCAS_CONHECIDAS', () => {
 describe('chaveProdutoCatalogo', () => {
   it('usa o código quando existe e nome+variante normalizados quando não', async () => {
     const { chaveProdutoCatalogo } = await import('../src/domain/catalogo.js');
-    expect(chaveProdutoCatalogo({ codigoBarras: '7891033000011', nome: 'X', variante: null })).toBe('cod:7891033000011');
+    expect(chaveProdutoCatalogo({ codigoBarras: '7891033000011', codigoRevista: null, nome: 'X', variante: null })).toBe('cod:7891033000011');
     expect(chaveProdutoCatalogo({ codigoBarras: null, nome: 'Hidratante  ÁGUA', variante: '400ml' })).toBe(
       chaveProdutoCatalogo({ codigoBarras: null, nome: 'hidratante agua', variante: '400ML' })
     );

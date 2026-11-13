@@ -6,6 +6,7 @@ import type { PrismaClient } from '@prisma/client';
  */
 export async function limparOperacoes(prisma: PrismaClient, operacaoIds: string[]) {
   const where = { operacao_id: { in: operacaoIds } };
+  await prisma.contatoCobranca.deleteMany({ where });
   await prisma.excedentePendente.deleteMany({ where });
   await prisma.pagamentoConta.deleteMany({ where });
   await prisma.parcelaConta.deleteMany({ where });

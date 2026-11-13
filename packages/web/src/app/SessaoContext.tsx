@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { limparDadosOffline } from '../lib/pwa';
 
 const CHAVE_TOKEN = 'consultorasync_session_token';
 
@@ -83,6 +84,7 @@ export function SessaoProvider({ children }: { children: ReactNode }) {
   }, [token, recarga]);
 
   const entrar = useCallback((novoToken: string, info: SessaoInfo) => {
+    limparDadosOffline();
     gravarToken(novoToken);
     setSessao(info);
     setEstado('conectada');
@@ -94,6 +96,7 @@ export function SessaoProvider({ children }: { children: ReactNode }) {
     if (atual) {
       fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${atual}` } }).catch(() => undefined);
     }
+    limparDadosOffline();
     gravarToken(null);
     setToken(null);
     setSessao(null);

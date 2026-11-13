@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useApiGet, formatarReais, formatarData, diasDesde } from '../lib/api';
+import { useApiGet, formatarReais, formatarData } from '../lib/api';
 import { useAcoes } from '../app/AcoesContext';
 import { useSessao } from '../app/SessaoContext';
 import { Cartao, Indicador, Situacao } from '../layout/ui';
-import { BotaoCobrar, DescricaoVencimento } from '../app/cobranca/acoes';
+import { FilaCobranca } from '../app/cobranca/FilaCobranca';
 import { Icone, type NomeIcone } from '../layout/Icone';
 import { saldoConta, resumoItens, type CompraListagem, type ContaListagem, type EstoqueLinha } from '../types/gestao';
 
@@ -28,8 +28,7 @@ export function HojePage() {
     .filter((c) => c.cobranca.situacao === 'ATRASADA')
     .sort((a, b) => b.cobranca.dias_atraso - a.cobranca.dias_atraso);
   const totalAtrasado = atrasadas.reduce((s, c) => s + c.cobranca.valor_vencido_centavos, 0);
-  // Sem atrasos, mostra as contas abertas há mais tempo (inclusive as sem vencimento).
-  const contasParaCobrar = (atrasadas.length ? atrasadas : [...emAberto].sort((a, b) => a.criado_em.localeCompare(b.criado_em))).slice(0, 5);
+  const semVencimento = emAberto.filter((c) => c.cobranca.situacao === 'SEM_VENCIMENTO');
 
   const primeiroNome = sessao?.operador_nome;
 
@@ -78,6 +77,15 @@ export function HojePage() {
         <Indicador rotulo="Sem pronta-entrega" valor={semProntaEntrega.length} detalhe="produtos zerados" onClick={() => navegar('/estoque')} />
       </div>
 
+      <div className="flex flex-col gap-2">
+        <FilaCobranca onVerContas={() => navegar('/contas')} />
+        {semVencimento.length > 0 && (
+          <button type="button" onClick={() => navegar('/contas')} className="self-start text-meta text-ink-secondary underline min-h-[36px]">
+            {semVencimento.length} conta(s) em aberto sem vencimento ({formatarReais(semVencimento.reduce((s, c) => s + saldoConta(c), 0))}) não entram na fila. Definir vencimentos
+          </button>
+        )}
+      </div>
+
       <div className="grid lg:grid-cols-2 gap-4">
         <Cartao>
           <TituloSecao titulo="Separados para entregar" verTodos={() => navegar('/vendas')} />
@@ -109,24 +117,6 @@ export function HojePage() {
           </Lista>
         </Cartao>
 
-        <Cartao className="lg:col-span-2">
-          <TituloSecao titulo={atrasadas.length ? 'Cobranças atrasadas' : 'Contas em aberto há mais tempo'} verTodos={() => navegar('/contas')} />
-          <Lista vazio="Nenhuma conta em aberto. Tudo recebido!">
-            {contasParaCobrar.map((c) => (
-              <LinhaLista
-                key={c.id}
-                onClick={() => acoes.abrirFicha(c.cliente_id)}
-                titulo={c.cliente.nome}
-                subtitulo={`Compra de ${formatarData(c.criado_em)} · ${diasDesde(c.criado_em)} dias · saldo ${formatarReais(saldoConta(c))}`}
-              >
-                <span className="text-meta tabular-nums hidden sm:inline">
-                  <DescricaoVencimento cobranca={c.cobranca} />
-                </span>
-                <BotaoCobrar conta={c} compacto />
-              </LinhaLista>
-            ))}
-          </Lista>
-        </Cartao>
       </div>
     </div>
   );

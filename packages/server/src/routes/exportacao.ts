@@ -162,6 +162,7 @@ const PLANILHAS: Record<string, Planilha> = {
         { titulo: 'Produto', valor: (p) => p.nome },
         { titulo: 'Variante', valor: (p) => p.variante },
         { titulo: 'Código de barras', valor: (p) => p.codigo_barras },
+        { titulo: 'Código da revista', valor: (p) => p.codigo_revista },
         { titulo: 'Preço de venda (R$)', valor: (p) => centavosParaReais(p.preco_venda_centavos) },
         { titulo: 'Custo (R$)', valor: (p) => centavosParaReais(p.custo_centavos) },
         { titulo: 'Em casa', valor: (p) => est(p)?.presentes ?? 0 },
@@ -239,7 +240,8 @@ export const exportacaoRoutes: FastifyPluginAsync = async (fastify) => {
       excedentes,
       comprasMarca,
       itensCompraMarca,
-      auditoria
+      auditoria,
+      contatosCobranca
     ] = await Promise.all([
       db.operacao.findFirst({}),
       db.operador.findMany({ select: { id: true, nome: true, ativo: true, criado_em: true } }),
@@ -256,7 +258,8 @@ export const exportacaoRoutes: FastifyPluginAsync = async (fastify) => {
       db.excedentePendente.findMany({}),
       db.compraMarca.findMany({}),
       db.itemCompraMarca.findMany({}),
-      db.registroAuditoria.findMany({})
+      db.registroAuditoria.findMany({}),
+      db.contatoCobranca.findMany({})
     ]);
 
     const copia = {
@@ -280,6 +283,7 @@ export const exportacaoRoutes: FastifyPluginAsync = async (fastify) => {
         excedentes,
         compras_marca: comprasMarca,
         itens_compra_marca: itensCompraMarca,
+        contatos_cobranca: contatosCobranca,
         auditoria
       }
     };

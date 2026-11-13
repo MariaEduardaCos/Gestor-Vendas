@@ -3,16 +3,22 @@
  * e planejamento da atualização dos produtos da marca.
  *
  * Regras:
- * - O produto é reconhecido pelo código de barras; sem código, por nome + variante
+ * - O produto é reconhecido pelo código de barras, depois pelo código da revista e, sem
+ *   nenhum dos dois, por nome + variante
  *   (sem diferenciar maiúsculas, acentos e espaços extras).
  * - Produto novo é criado; produto existente com preço diferente tem o preço atualizado
  *   somente após a confirmação da prévia. Vendas e encomendas já registradas mantêm o
  *   preço congelado no item da conta.
- * - Produtos que não aparecem no novo catálogo continuam cadastrados (podem ter estoque).
+ * - Produtos que não aparecem no novo catálogo continuam cadastrados (podem ter estoque),
+ *   mas ficam com o ciclo antigo e aparecem como "fora do ciclo atual".
  */
+
+import { classificarCodigo } from './codigo-produto.js';
 
 export interface LinhaCatalogo {
   codigoBarras: string | null;
+  /** Código impresso na revista do ciclo (3 a 7 números). */
+  codigoRevista?: string | null;
   nome: string;
   variante: string | null;
   precoVendaCentavos: number;
@@ -29,6 +35,7 @@ export interface ProdutoCatalogoExistente {
   nome: string;
   variante: string | null;
   codigoBarras: string | null;
+  codigoRevista?: string | null;
   precoVendaCentavos: number;
 }
 
@@ -78,13 +85,13 @@ export function converterPrecoParaCentavos(valor: string): number | null {
   return Math.round(numero * 100);
 }
 
-const pareceCodigoBarras = (s: string) => /^\d{8,14}$/.test(s.trim());
-
 /**
- * Lê uma linha por produto, colunas separadas por ";" ou tabulação (como ao copiar de planilha):
- *   código ; nome ; variante ; preço    (4 colunas)
- *   nome ; variante ; preço   ou   código ; nome ; preço    (3 colunas)
- *   nome ; preço    (2 colunas)
+ * Lê uma linha por produto, colunas separadas por ";" ou tabulação (como ao copiar de planilha).
+ * O código pode ser o da revista (3 a 7 números) ou o de barras (8 a 14 números):
+ *   código revista ; código de barras ; nome ; variante ; preço    (5 colunas)
+ *   código ; nome ; variante ; preço                              (4 colunas)
+ *   código ; nome ; preço   ou   nome ; variante ; preço           (3 colunas)
+ *   nome ; preço                                                  (2 colunas)
  * Linhas vazias e cabeçalho são ignorados.
  */
 export function interpretarTextoCatalogo(texto: string): { linhas: LinhaCatalogo[]; erros: ErroLinhaCatalogo[] } {
@@ -96,34 +103,46 @@ export function interpretarTextoCatalogo(texto: string): { linhas: LinhaCatalogo
     if (!conteudo) return;
     const partes = conteudo.split(/\t|;/).map((p) => p.trim());
     const preco = converterPrecoParaCentavos(partes[partes.length - 1] ?? '');
+    const erro = (motivo: string) => erros.push({ linha: indice + 1, conteudo, motivo });
 
     if (preco === null) {
       const ehCabecalho = linhas.length === 0 && erros.length === 0 && /pre[cç]o|valor/i.test(conteudo);
-      if (!ehCabecalho) erros.push({ linha: indice + 1, conteudo, motivo: 'Preço ausente ou inválido na última coluna.' });
+      if (!ehCabecalho) erro('Preço ausente ou inválido na última coluna.');
       return;
     }
 
-    let codigo: string | null = null;
+    let codigos: string[] = [];
     let nome = '';
     let variante: string | null = null;
-    if (partes.length >= 4) {
-      [codigo, nome, variante] = [partes[0] || null, partes[1], partes[2] || null];
+    if (partes.length >= 5) {
+      [codigos, nome, variante] = [[partes[0], partes[1]], partes[2], partes[3] || null];
+    } else if (partes.length === 4) {
+      [codigos, nome, variante] = [[partes[0]], partes[1], partes[2] || null];
     } else if (partes.length === 3) {
-      if (pareceCodigoBarras(partes[0])) [codigo, nome] = [partes[0], partes[1]];
+      if (classificarCodigo(partes[0]).tipo !== 'TEXTO') [codigos, nome] = [[partes[0]], partes[1]];
       else [nome, variante] = [partes[0], partes[1] || null];
     } else if (partes.length === 2) {
       nome = partes[0];
     }
 
     if (!nome) {
-      erros.push({ linha: indice + 1, conteudo, motivo: 'Nome do produto ausente.' });
+      erro('Nome do produto ausente.');
       return;
     }
-    if (codigo && !pareceCodigoBarras(codigo)) {
-      erros.push({ linha: indice + 1, conteudo, motivo: 'Código de barras deve ter de 8 a 14 dígitos.' });
-      return;
+
+    let codigoBarras: string | null = null;
+    let codigoRevista: string | null = null;
+    for (const bruto of codigos) {
+      if (!bruto) continue;
+      const c = classificarCodigo(bruto);
+      if (c.tipo === 'BARRAS' && !codigoBarras) codigoBarras = c.valor;
+      else if (c.tipo === 'REVISTA' && !codigoRevista) codigoRevista = c.valor;
+      else {
+        erro(`Código "${bruto}" inválido: use o da revista (3 a 7 números) ou o de barras (8 a 14 números).`);
+        return;
+      }
     }
-    linhas.push({ codigoBarras: codigo, nome, variante, precoVendaCentavos: preco });
+    linhas.push({ codigoBarras, codigoRevista, nome, variante, precoVendaCentavos: preco });
   });
 
   return { linhas, erros };
@@ -134,18 +153,26 @@ const chaveNome = (nome: string, variante: string | null) => `${normalizarTexto(
 /** Decide, para cada linha do catálogo, se o produto será criado, terá o preço atualizado ou ficará igual. */
 export function planejarImportacaoCatalogo(existentes: ProdutoCatalogoExistente[], linhas: LinhaCatalogo[]): AcaoCatalogo[] {
   const porCodigo = new Map<string, ProdutoCatalogoExistente>();
+  const porRevista = new Map<string, ProdutoCatalogoExistente>();
   const porNome = new Map<string, ProdutoCatalogoExistente>();
   for (const p of existentes) {
     if (p.codigoBarras) porCodigo.set(p.codigoBarras, p);
+    if (p.codigoRevista) porRevista.set(p.codigoRevista, p);
     porNome.set(chaveNome(p.nome, p.variante), p);
   }
 
   // Linhas repetidas no mesmo catálogo: vale a última.
   const unicas = new Map<string, LinhaCatalogo>();
-  for (const l of linhas) unicas.set(l.codigoBarras ?? chaveNome(l.nome, l.variante), l);
+  for (const l of linhas) {
+    const chave = l.codigoBarras ? `cod:${l.codigoBarras}` : l.codigoRevista ? `rev:${l.codigoRevista}` : chaveNome(l.nome, l.variante);
+    unicas.set(chave, l);
+  }
 
   return [...unicas.values()].map((linha): AcaoCatalogo => {
-    const produto = (linha.codigoBarras && porCodigo.get(linha.codigoBarras)) || porNome.get(chaveNome(linha.nome, linha.variante));
+    const produto =
+      (linha.codigoBarras && porCodigo.get(linha.codigoBarras)) ||
+      (linha.codigoRevista && porRevista.get(linha.codigoRevista)) ||
+      porNome.get(chaveNome(linha.nome, linha.variante));
     if (!produto) return { tipo: 'CRIAR', linha };
     if (produto.precoVendaCentavos !== linha.precoVendaCentavos) {
       return { tipo: 'ATUALIZAR_PRECO', linha, produtoId: produto.id, precoAnteriorCentavos: produto.precoVendaCentavos };
