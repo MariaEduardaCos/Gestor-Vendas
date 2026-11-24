@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { travarEstoque } from '../db/bloqueio-estoque.js';
 import { lerVencimentos, resumoCobrancaDaConta } from './cobranca.js';
 import {
   gerarUuidV7,
@@ -132,6 +133,7 @@ export const vendasRoutes: FastifyPluginAsync = async (fastify) => {
             }
 
             // Busca estoque atual do produto
+            await travarEstoque(tx, session.operacaoId, produto.id);
             const estoqueDb = await tx.estoqueItem.findFirst({
               where: {
                 operacao_id: session.operacaoId,
@@ -440,6 +442,7 @@ export const vendasRoutes: FastifyPluginAsync = async (fastify) => {
           }
 
           // Busca e atualiza o estoque físico com baixa estrita apenas na entrega (AD-3)
+          await travarEstoque(tx, session.operacaoId, itemConta.produto_id);
           const estoqueDb = await tx.estoqueItem.findFirst({
             where: {
               operacao_id: session.operacaoId,
@@ -594,6 +597,7 @@ export const vendasRoutes: FastifyPluginAsync = async (fastify) => {
           const itensEntregues = [];
 
           for (const itemConta of itensReservados) {
+            await travarEstoque(tx, session.operacaoId, itemConta.produto_id);
             const estoqueDb = await tx.estoqueItem.findFirst({
               where: {
                 operacao_id: session.operacaoId,
@@ -747,6 +751,7 @@ export const vendasRoutes: FastifyPluginAsync = async (fastify) => {
 
           // Se estava reservado na estante/armário, libera a reserva de volta para a pronta-entrega (AD-3, FR-029)
           if (itemConta.status_entrega === 'RESERVADO_PRESENTE') {
+            await travarEstoque(tx, session.operacaoId, itemConta.produto_id);
             const estoqueDb = await tx.estoqueItem.findFirst({
               where: {
                 operacao_id: session.operacaoId,

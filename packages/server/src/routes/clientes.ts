@@ -97,8 +97,8 @@ export const clientesRoutes: FastifyPluginAsync = async (fastify) => {
         where: termo.length > 0
           ? {
               OR: [
-                { nome: { contains: termo } },
-                { telefone: { contains: termo } }
+                { nome: { contains: termo, mode: 'insensitive' } },
+                { telefone: { contains: termo, mode: 'insensitive' } }
               ]
             }
           : {},

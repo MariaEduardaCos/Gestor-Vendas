@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { MarcaDTO, ProdutoDTO } from '../types/produto';
+import { EspelhoPedido, type LinhaEspelho } from './EspelhoPedido';
+import { FotoProduto } from './FotoProduto';
 
 interface CompraMarcaModalProps {
   isOpen: boolean;
@@ -17,6 +19,9 @@ interface ItemPendencia {
   produto_id: string;
   produto_nome: string;
   variante: string | null;
+  codigo_revista?: string | null;
+  codigo_barras?: string | null;
+  imagem_url?: string | null;
   marca_id: string;
   quantidade: number;
   custo_unitario_centavos: number | null;
@@ -181,11 +186,7 @@ export function CompraMarcaModal({
   // Cálculo ao vivo do espelho do pedido (FR-017)
   const itensClientesSelecionados = pendencias.filter((p) => p.selecionado);
 
-  interface LinhaEspelhoPreview {
-    produtoId: string;
-    produtoNome: string;
-    variante: string | null;
-    quantidadeTotal: number;
+  interface LinhaEspelhoPreview extends LinhaEspelho {
     quantidadeClientes: number;
     quantidadeProntaEntrega: number;
     clientesVinculados: Array<{ nome: string; quantidade: number }>;
@@ -200,6 +201,9 @@ export function CompraMarcaModal({
         produtoId: item.produto_id,
         produtoNome: item.produto_nome,
         variante: item.variante,
+        codigoRevista: item.codigo_revista ?? null,
+        codigoBarras: item.codigo_barras ?? null,
+        imagemUrl: item.imagem_url ?? null,
         quantidadeTotal: 0,
         quantidadeClientes: 0,
         quantidadeProntaEntrega: 0,
@@ -222,6 +226,9 @@ export function CompraMarcaModal({
         produtoId: item.produto.id,
         produtoNome: item.produto.nome,
         variante: item.produto.variante,
+        codigoRevista: item.produto.codigo_revista ?? null,
+        codigoBarras: item.produto.codigo_barras ?? null,
+        imagemUrl: item.produto.imagem_url ?? null,
         quantidadeTotal: 0,
         quantidadeClientes: 0,
         quantidadeProntaEntrega: 0,
@@ -379,36 +386,10 @@ export function CompraMarcaModal({
                   </span>
                 </div>
 
-                <div className="divide-y divide-border-hairline bg-surface-raised rounded-md border border-border-hairline overflow-hidden">
-                  {compraSucesso.espelho_produtos?.map((linha: any) => (
-                    <div key={linha.produtoId} className="p-3 flex flex-col gap-2">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-body-lg font-bold text-ink-primary">{linha.produtoNome}</p>
-                          {linha.variante && <p className="text-meta text-ink-muted">{linha.variante}</p>}
-                        </div>
-                        <div className="text-right">
-                          <span className="text-title-lg font-extrabold text-brand-primary bg-brand-subtle px-3 py-1 rounded-md">
-                            {linha.quantidadeTotal} un
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="text-meta text-ink-secondary bg-surface-sunken p-2 rounded">
-                        <span className="font-semibold text-ink-primary">Separação: </span>
-                        {linha.destinacoes?.map((d: any, idx: number) => (
-                          <span key={idx} className="mr-2 inline-block">
-                            {d.tipo === 'CLIENTE' ? (
-                              <span className="text-brand-primary font-medium">👤 {d.clienteNome}: {d.quantidade} un</span>
-                            ) : (
-                              <span className="text-ink-primary font-medium">📦 Pronta-Entrega: {d.quantidade} un</span>
-                            )}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <EspelhoPedido
+                  linhas={compraSucesso.espelho_produtos ?? []}
+                  nomeArquivo={`pedido-${String(compraSucesso.marca_nome ?? 'marca').toLowerCase().replace(/[^a-z0-9]+/g, '-')}${compraSucesso.numero_pedido ? `-${compraSucesso.numero_pedido}` : ''}`}
+                />
               </div>
 
               <div className="flex justify-end pt-2">
@@ -484,11 +465,13 @@ export function CompraMarcaModal({
                             onChange={() => togglePendencia(idx)}
                             className="w-5 h-5 accent-brand-primary cursor-pointer"
                           />
+                          <FotoProduto url={item.imagem_url} tamanho="sm" />
                           <div>
                             <p className="text-body-md font-bold text-ink-primary">
                               {item.produto_nome}
                               {item.variante && <span className="text-ink-muted font-normal"> ({item.variante})</span>}
                             </p>
+                            <p className="text-meta text-ink-secondary">Código: {item.codigo_revista || item.codigo_barras || 'sem código'}</p>
                             <p className="text-meta text-brand-primary font-semibold">
                               👤 Cliente: {item.cliente_nome}
                             </p>
@@ -550,9 +533,13 @@ export function CompraMarcaModal({
                         key={pe.produto.id}
                         className="flex items-center justify-between bg-surface-raised p-2 rounded border border-border-hairline text-body-sm"
                       >
-                        <div>
-                          <span className="font-bold text-ink-primary">{pe.produto.nome}</span>
-                          {pe.produto.variante && <span className="text-ink-muted"> ({pe.produto.variante})</span>}
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FotoProduto url={pe.produto.imagem_url} tamanho="sm" />
+                          <div className="min-w-0">
+                            <span className="font-bold text-ink-primary">{pe.produto.nome}</span>
+                            {pe.produto.variante && <span className="text-ink-muted"> ({pe.produto.variante})</span>}
+                            <p className="text-meta text-ink-secondary">Código: {pe.produto.codigo_revista || pe.produto.codigo_barras || 'sem código'}</p>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -588,27 +575,7 @@ export function CompraMarcaModal({
                   </span>
                 </div>
 
-                {linhasEspelho.length === 0 ? (
-                  <p className="text-meta text-ink-muted italic">
-                    Nenhum item adicionado ainda ao pedido.
-                  </p>
-                ) : (
-                  <div className="divide-y divide-border-hairline bg-surface-raised rounded border border-border-hairline overflow-hidden">
-                    {linhasEspelho.map((linha) => (
-                      <div key={linha.produtoId} className="p-2.5 flex items-center justify-between">
-                        <div>
-                          <p className="text-body-md font-bold text-ink-primary">{linha.produtoNome}</p>
-                          <p className="text-meta text-ink-muted">
-                            Clientes: {linha.quantidadeClientes} un | Pronta-entrega: {linha.quantidadeProntaEntrega} un
-                          </p>
-                        </div>
-                        <span className="text-title-md font-extrabold text-brand-primary">
-                          {linha.quantidadeTotal} un
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <EspelhoPedido linhas={linhasEspelho} exportavel={false} />
               </div>
 
               {/* Informações Complementares Opcionais */}

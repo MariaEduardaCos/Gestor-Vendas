@@ -1,3 +1,4 @@
+import { FotoProduto } from './FotoProduto';
 import { useState, useEffect } from 'react';
 import { BipadorProdutos } from '../app/leitura/BipadorProdutos';
 import type { ProdutoDTO } from '../types/produto';
@@ -269,6 +270,7 @@ export function EncomendaModal({
                     key={produto.id}
                     className="p-3 bg-surface-sunken border border-border-hairline rounded-lg flex items-center justify-between gap-2"
                   >
+                    <FotoProduto url={produto.imagem_url} />
                     <div className="flex-1 min-w-0">
                       <p className="text-body-md font-bold text-ink-primary truncate">
                         {produto.nome}

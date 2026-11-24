@@ -1,6 +1,10 @@
 import fastify, { FastifyInstance, FastifyError } from 'fastify';
 import cors from '@fastify/cors';
 import fastifyWebsocket from '@fastify/websocket';
+import fastifyStatic from '@fastify/static';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@prisma/client';
 import { createProblemDetails, DomainError } from '@consultorasync/core';
 import { sessionPlugin } from './plugins/session.js';
@@ -19,9 +23,13 @@ import { contasRoutes } from './routes/contas.js';
 import { catalogoRoutes } from './routes/catalogo.js';
 import { cobrancaRoutes } from './routes/cobranca.js';
 import { exportacaoRoutes } from './routes/exportacao.js';
+import { boletosRoutes } from './routes/boletos.js';
+import type { Buscador } from './services/consulta-online.js';
 
 export interface BuildAppOptions {
   prisma?: PrismaClient;
+  /** Como buscar nas fontes da pesquisa online (os testes trocam por respostas simuladas). */
+  buscadorOnline?: Buscador;
 }
 
 export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
@@ -34,6 +42,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 
   const prisma = options.prisma ?? new PrismaClient();
   app.decorate('prisma', prisma);
+  app.decorate('buscadorOnline', options.buscadorOnline ?? ((url, init) => fetch(url, init)));
 
   // CORS
   app.register(cors, {
@@ -62,6 +71,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   app.register(catalogoRoutes);
   app.register(cobrancaRoutes);
   app.register(exportacaoRoutes);
+  app.register(boletosRoutes);
 
   // Global Error Handler conforme RFC 7807
   app.setErrorHandler((error: FastifyError | Error, request, reply) => {
@@ -94,6 +104,21 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       )
     );
   });
+
+  // Em produção o próprio servidor entrega as telas (build do pacote web), num endereço só.
+  const pastaWeb = process.env.WEB_DIST || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/dist');
+  if (process.env.NODE_ENV !== 'test' && existsSync(path.join(pastaWeb, 'index.html'))) {
+    app.register(fastifyStatic, { root: pastaWeb, wildcard: false });
+    // Rotas do React (ex.: /financeiro) abrem o index.html; /api e /ws continuam com 404 em JSON.
+    app.setNotFoundHandler((request, reply) => {
+      if (request.method === 'GET' && !request.url.startsWith('/api') && !request.url.startsWith('/ws')) {
+        return reply.type('text/html').sendFile('index.html');
+      }
+      return reply.status(404).type('application/problem+json').send(
+        createProblemDetails(404, 'NOT_FOUND', 'Não Encontrado', `Rota ${request.method} ${request.url} não existe.`)
+      );
+    });
+  }
 
   return app;
 }

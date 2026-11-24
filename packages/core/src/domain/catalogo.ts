@@ -19,6 +19,8 @@ export interface LinhaCatalogo {
   codigoBarras: string | null;
   /** Código impresso na revista do ciclo (3 a 7 números). */
   codigoRevista?: string | null;
+  /** Endereço da foto, quando a lista vem do catálogo de referência. */
+  imagemUrl?: string | null;
   nome: string;
   variante: string | null;
   precoVendaCentavos: number;

@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { classificarCodigo } from '@consultorasync/core';
+import { classificarCodigo, normalizarTexto } from '@consultorasync/core';
 import type { ProdutoDTO, MarcaDTO } from '../types/produto';
 
 interface ProdutoModalProps {
   isOpen: boolean;
   produtoParaEditar?: ProdutoDTO | null;
   codigoPrePreenchido?: string;
+  /** Dados trazidos do catálogo ou da pesquisa online para um produto novo (a revendedora confere). */
+  dadosIniciais?: { nome?: string; marcaNome?: string | null; precoCentavos?: number | null; imagemUrl?: string | null } | null;
   onClose: () => void;
   onProdutoSalvo: (produto: ProdutoDTO) => void;
   sessionToken?: string;
@@ -16,6 +18,7 @@ export function ProdutoModal({
   isOpen,
   produtoParaEditar,
   codigoPrePreenchido,
+  dadosIniciais,
   onClose,
   onProdutoSalvo,
   sessionToken,
@@ -27,6 +30,7 @@ export function ProdutoModal({
   const [variante, setVariante] = useState('');
   const [codigoBarras, setCodigoBarras] = useState('');
   const [codigoRevista, setCodigoRevista] = useState('');
+  const [imagemUrl, setImagemUrl] = useState<string | null>(null);
   const [precoVendaReais, setPrecoVendaReais] = useState('');
   const [informarCustoManual, setInformarCustoManual] = useState(false);
   const [custoManualReais, setCustoManualReais] = useState('');
@@ -62,6 +66,7 @@ export function ProdutoModal({
         setVariante(produtoParaEditar.variante || '');
         setCodigoBarras(produtoParaEditar.codigo_barras || '');
         setCodigoRevista(produtoParaEditar.codigo_revista || '');
+        setImagemUrl(produtoParaEditar.imagem_url ?? null);
         setPrecoVendaReais((produtoParaEditar.preco_venda_centavos / 100).toFixed(2).replace('.', ','));
 
         if (produtoParaEditar.proveniencia_custo === 'INFORMADO_MANUAL' && produtoParaEditar.custo_centavos !== null) {
@@ -73,18 +78,27 @@ export function ProdutoModal({
         }
       } else {
         setMarcaId('');
-        setNome('');
+        setNome(dadosIniciais?.nome ?? '');
+        setImagemUrl(dadosIniciais?.imagemUrl ?? null);
         setVariante('');
         // Código curto lido/digitado é o da revista; longo é o de barras.
         const pre = classificarCodigo(codigoPrePreenchido);
         setCodigoBarras(pre.tipo === 'BARRAS' ? pre.valor : '');
         setCodigoRevista(pre.tipo === 'REVISTA' ? pre.valor : '');
-        setPrecoVendaReais('');
+        setPrecoVendaReais(dadosIniciais?.precoCentavos ? (dadosIniciais.precoCentavos / 100).toFixed(2).replace('.', ',') : '');
         setInformarCustoManual(false);
         setCustoManualReais('');
       }
     }
-  }, [isOpen, produtoParaEditar, codigoPrePreenchido]);
+  }, [isOpen, produtoParaEditar, codigoPrePreenchido, dadosIniciais]);
+
+  // Marca sugerida pela pesquisa: seleciona se a revendedora já vende essa marca.
+  useEffect(() => {
+    if (!isOpen || produtoParaEditar || marcaId || !dadosIniciais?.marcaNome) return;
+    const alvo = normalizarTexto(dadosIniciais.marcaNome);
+    const marca = marcas.find((m) => normalizarTexto(m.nome) === alvo);
+    if (marca) setMarcaId(marca.id);
+  }, [isOpen, produtoParaEditar, marcas, dadosIniciais, marcaId]);
 
   if (!isOpen) return null;
 
@@ -136,6 +150,8 @@ export function ProdutoModal({
 
   const handleSalvar = async (e: React.FormEvent) => {
     e.preventDefault();
+    // O cadastro pode abrir por cima da venda/encomenda: o envio não deve chegar ao formulário de trás.
+    e.stopPropagation();
     if (!nome.trim()) {
       setErro('O nome do produto é obrigatório.');
       return;
@@ -160,6 +176,7 @@ export function ProdutoModal({
       variante: variante.trim() ? variante.trim() : null,
       codigo_barras: codigoBarras.trim() ? codigoBarras.trim() : null,
       codigo_revista: codigoRevista.trim() ? codigoRevista.trim() : null,
+      imagem_url: imagemUrl,
       preco_venda_centavos: precoVendaCentavos
     };
 
@@ -232,6 +249,20 @@ export function ProdutoModal({
 
         {/* Formulário com Rolagem */}
         <form onSubmit={handleSalvar} className="p-4 overflow-y-auto flex-1 flex flex-col gap-4">
+          {!produtoParaEditar && dadosIniciais && (
+            <p className="p-2 rounded-md bg-brand-subtle text-meta text-ink-primary">
+              Dados trazidos da pesquisa. Confira o nome, a marca e o preço de venda antes de salvar
+              {dadosIniciais.precoCentavos ? ' (o preço sugerido é o preço médio encontrado)' : ''}.
+            </p>
+          )}
+          {imagemUrl && (
+            <div className="flex items-center gap-3">
+              <img src={imagemUrl} alt="Foto do produto" referrerPolicy="no-referrer" className="w-20 h-20 rounded-md object-contain bg-white border border-border-hairline" />
+              <button type="button" onClick={() => setImagemUrl(null)} className="text-meta font-semibold text-ink-secondary underline min-h-[36px]">
+                Remover foto
+              </button>
+            </div>
+          )}
           {/* Marca com atalho para gerenciar */}
           <div>
             <div className="flex items-center justify-between mb-1">

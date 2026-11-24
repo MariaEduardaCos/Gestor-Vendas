@@ -242,6 +242,14 @@ describe('Story 2.2: Compras à Marca API - Consolidação de Pedido e Separaç�
       // Espelho de produtos para digitação no site da marca (FR-017)
       expect(data.espelho_produtos).toBeDefined();
       expect(data.espelho_produtos.length).toBe(2);
+      // O espelho leva o que a revendedora digita no site da marca: nome e códigos
+      for (const linha of data.espelho_produtos) {
+        expect(typeof linha.produtoNome).toBe('string');
+        expect(linha.produtoNome.length).toBeGreaterThan(0);
+        expect(linha).toHaveProperty('codigoRevista');
+        expect(linha).toHaveProperty('codigoBarras');
+        expect(linha).toHaveProperty('imagemUrl');
+      }
 
       const espelhoHidratante = data.espelho_produtos.find(
         (e: any) => e.produtoId === produtoHidratanteNaturaAId

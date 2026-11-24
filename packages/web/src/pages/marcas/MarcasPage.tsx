@@ -14,6 +14,7 @@ export interface MarcaDTO {
   catalogo_atualizado_em: string | null;
   quantidade_produtos: number;
   catalogo_compartilhado_quantidade: number;
+  catalogo_oficial_ciclo?: string | null;
 }
 
 interface Escolha {
@@ -104,10 +105,17 @@ export function MarcasPage() {
                   : 'Nenhum catálogo carregado'}{' '}
                 · {m.quantidade_produtos} produto(s)
               </p>
-              {m.catalogo_compartilhado_quantidade > 0 && m.quantidade_produtos === 0 && (
+              {m.catalogo_oficial_ciclo && m.catalogo_oficial_ciclo !== m.catalogo_ciclo ? (
                 <p className="text-meta text-status-available font-semibold">
-                  {m.catalogo_compartilhado_quantidade} produtos disponíveis no catálogo compartilhado
+                  Campanha {m.catalogo_oficial_ciclo} pronta para carregar: {m.catalogo_compartilhado_quantidade} produtos com código e preço
                 </p>
+              ) : (
+                m.catalogo_compartilhado_quantidade > 0 &&
+                m.quantidade_produtos === 0 && (
+                  <p className="text-meta text-status-available font-semibold">
+                    {m.catalogo_compartilhado_quantidade} produtos disponíveis no catálogo compartilhado
+                  </p>
+                )
               )}
               <button
                 type="button"

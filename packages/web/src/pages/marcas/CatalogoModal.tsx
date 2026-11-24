@@ -22,7 +22,13 @@ interface Previa {
 }
 
 interface Props {
-  marca: { id: string; nome: string; catalogo_ciclo: string | null; catalogo_compartilhado_quantidade?: number };
+  marca: {
+    id: string;
+    nome: string;
+    catalogo_ciclo: string | null;
+    catalogo_compartilhado_quantidade?: number;
+    catalogo_oficial_ciclo?: string | null;
+  };
   onClose: () => void;
   onAplicado: (resumo: Previa) => void;
 }
@@ -77,7 +83,7 @@ export function CatalogoModal({ marca, onClose, onAplicado }: Props) {
     try {
       const ref = await apiFetch<{ ciclo: string | null; itens: LinhaCatalogo[] }>(`/marcas/${marca.id}/catalogo-compartilhado`, token);
       if (!ref.itens.length) return setErro('Ainda não há catálogo compartilhado desta marca.');
-      const cicloRef = ciclo.trim() || ref.ciclo || 'Catálogo compartilhado';
+      const cicloRef = (marca.catalogo_oficial_ciclo ? ref.ciclo : ciclo.trim() || ref.ciclo) || 'Catálogo compartilhado';
       setCiclo(cicloRef);
       setLinhas(ref.itens);
       setErrosLeitura([]);
@@ -131,7 +137,16 @@ export function CatalogoModal({ marca, onClose, onAplicado }: Props) {
               {(marca.catalogo_compartilhado_quantidade ?? 0) > 0 && (
                 <div className="p-3 rounded-lg border border-status-available bg-status-available-bg flex flex-wrap items-center gap-3">
                   <p className="flex-1 min-w-[200px] text-body-md">
-                    <strong>{marca.catalogo_compartilhado_quantidade} produtos</strong> desta marca estão no catálogo compartilhado pelas revendedoras. Use a lista e confira os preços na prévia.
+                    {marca.catalogo_oficial_ciclo ? (
+                      <>
+                        A campanha <strong>{marca.catalogo_oficial_ciclo}</strong> desta marca já está no sistema, com{' '}
+                        <strong>{marca.catalogo_compartilhado_quantidade} produtos</strong> (código e preço). Carregue a lista e confira na prévia.
+                      </>
+                    ) : (
+                      <>
+                        <strong>{marca.catalogo_compartilhado_quantidade} produtos</strong> desta marca estão no catálogo compartilhado pelas revendedoras. Use a lista e confira os preços na prévia.
+                      </>
+                    )}
                   </p>
                   <button
                     type="button"
@@ -139,7 +154,7 @@ export function CatalogoModal({ marca, onClose, onAplicado }: Props) {
                     disabled={enviando}
                     className="min-h-[44px] px-4 rounded-md bg-status-available text-ink-inverse font-semibold disabled:opacity-60"
                   >
-                    Usar catálogo compartilhado
+                    {marca.catalogo_oficial_ciclo ? 'Carregar campanha' : 'Usar catálogo compartilhado'}
                   </button>
                 </div>
               )}

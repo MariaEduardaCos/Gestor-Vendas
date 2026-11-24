@@ -1,3 +1,4 @@
+import { FotoProduto } from './FotoProduto';
 import { useState, useEffect } from 'react';
 import { BipadorProdutos } from '../app/leitura/BipadorProdutos';
 import { CampoVencimento, VENCIMENTO_VAZIO, vencimentoIncompleto, vencimentoParaPayload, type ValorVencimento } from '../app/cobranca/CampoVencimento';
@@ -506,6 +507,7 @@ export function VendaModal({
 
                   return (
                     <div key={it.produto.id} className="py-2.5 flex items-center justify-between gap-3 text-sm">
+                      <FotoProduto url={it.produto.imagem_url} />
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-text-primary truncate">{it.produto.nome}</div>
                         <div className="text-xs text-text-secondary">

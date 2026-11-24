@@ -2,7 +2,7 @@ feature,area,priority,original,clone,notes
 Cadastro de clientes e ficha com histórico,clientes,must,MR+RO,yes,
 Cadastro de produto com variante e preço,produtos,must,MR+RO,yes,
 Leitura de código de barras pela câmera,produtos,must,MR,yes,"Também na venda e na encomenda; aceita código de barras (ignora espaços e zero à esquerda), código da revista ou nome; vários resultados viram lista para escolher; código desconhecido sugere produto do catálogo compartilhado; celular pareado (HTTPS em dev:celular)"
-Catálogo de marcas para cadastro rápido,produtos,must,MR+RO,partial,"Catálogo compartilhado entre revendedoras (colaborativo) + importação do ciclo com código da revista e de barras; produtos que saíram do catálogo ficam marcados ""fora do ciclo atual""; sem catálogo oficial das marcas"
+Catálogo de marcas para cadastro rápido,produtos,must,MR+RO,partial,"Catálogo da campanha guardado no banco: carga oficial por ciclo (comando do administrador) + contribuição das revendedoras; código da revista e de barras, preço e foto; produtos fora do ciclo ficam marcados; pesquisa online por código de barras como alternativa (nome, marca, preço médio e foto); as listas das campanhas precisam ser fornecidas a cada ciclo"
 Comissão/percentual por marca,produtos,must,MR,yes,Custo estimado pelo percentual da marca
 Controle de estoque com baixa na venda,estoque,must,MR+RO,yes,Separa em casa / reservado / pronta-entrega / a chegar
 Registro de venda,vendas,must,MR+RO,yes,

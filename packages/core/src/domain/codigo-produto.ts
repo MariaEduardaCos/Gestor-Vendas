@@ -69,3 +69,15 @@ export function produtoTemCodigo(produto: ProdutoComCodigos, entrada: string): b
   if (c.tipo === 'REVISTA') return limparCodigoRevista(produto.codigo_revista) === c.valor;
   return false;
 }
+
+/**
+ * Confere o dígito verificador de um código de barras (EAN-8, UPC-A, EAN-13, GTIN-14).
+ * Um código com dígito errado quase sempre é erro de digitação ou de leitura.
+ */
+export function digitoVerificadorValido(codigo: string): boolean {
+  if (!/^\d{8}$|^\d{12,14}$/.test(codigo)) return false;
+  const numeros = codigo.split('').map(Number);
+  const verificador = numeros.pop()!;
+  const soma = numeros.reverse().reduce((total, n, i) => total + n * (i % 2 === 0 ? 3 : 1), 0);
+  return (10 - (soma % 10)) % 10 === verificador;
+}

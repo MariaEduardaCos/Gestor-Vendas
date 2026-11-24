@@ -4,6 +4,7 @@ import { VisorLeituraHibrido } from './VisorLeituraHibrido';
 import { PainelPareamentoDesktop } from './PainelPareamentoDesktop';
 import { ProdutoModal } from './ProdutoModal';
 import type { ProdutoDTO } from '../types/produto';
+import { PesquisaOnline, type DadosOnline } from '../app/leitura/PesquisaOnline';
 
 interface SugestaoCompartilhada {
   marca_nome: string;
@@ -11,6 +12,8 @@ interface SugestaoCompartilhada {
   variante: string | null;
   codigo_barras: string | null;
   codigo_revista: string | null;
+  imagem_url?: string | null;
+  oficial?: boolean;
   preco_sugerido_centavos: number;
   ciclo: string;
 }
@@ -37,6 +40,7 @@ export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorV
   // Mais de um produto para o que foi lido/digitado: a revendedora escolhe (nada é escolhido sozinho)
   const [escolhas, setEscolhas] = useState<{ titulo: string; produtos: ProdutoDTO[] } | null>(null);
   const [sugestao, setSugestao] = useState<SugestaoCompartilhada | null>(null);
+  const [dadosOnline, setDadosOnline] = useState<DadosOnline | null>(null);
 
   const selecionar = useCallback(
     (produto: ProdutoDTO) => {
@@ -128,6 +132,7 @@ export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorV
           variante: s.variante,
           codigo_barras: s.codigo_barras,
           codigo_revista: s.codigo_revista,
+          imagem_url: s.imagem_url ?? null,
           preco_venda_centavos: s.preco_sugerido_centavos
         })
       });
@@ -142,6 +147,7 @@ export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorV
 
   const handleProdutoCadastradoComSucesso = (novoProduto: ProdutoDTO) => {
     setModalCadastroAberto(false);
+    setDadosOnline(null);
     setCodigoNaoCadastrado(null);
     setUltimoProdutoLido(novoProduto);
     setProdutosBipados((prev) => [novoProduto, ...prev]);
@@ -267,8 +273,16 @@ export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorV
       {/* Destaque do Último Produto Identificado */}
       {ultimoProdutoLido && (
         <div className="bg-surface-raised border-2 border-brand-primary rounded-lg p-4 shadow-md flex flex-col gap-3 animate-fade-in">
-          <div className="flex items-start justify-between">
-            <div>
+          <div className="flex items-start justify-between gap-3">
+            {ultimoProdutoLido.imagem_url && (
+              <img
+                src={ultimoProdutoLido.imagem_url}
+                alt=""
+                referrerPolicy="no-referrer"
+                className="w-16 h-16 rounded-md object-contain bg-white border border-border-hairline shrink-0"
+              />
+            )}
+            <div className="flex-1 min-w-0">
               <span className="bg-status-available-bg text-status-available text-meta font-bold px-2.5 py-1 rounded-full">
                 ✓ Produto Identificado
               </span>
@@ -395,7 +409,9 @@ export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorV
 
             {sugestao && (
               <div className="p-3 rounded-md border border-status-available bg-status-available-bg text-body-md">
-                <p className="text-meta text-status-available font-semibold">Encontrado no catálogo compartilhado</p>
+                <p className="text-meta text-status-available font-semibold">
+                  {sugestao.oficial ? 'Encontrado no catálogo da campanha' : 'Encontrado no catálogo compartilhado'}
+                </p>
                 <p className="font-semibold text-ink-primary">
                   {sugestao.nome}
                   {sugestao.variante ? ` — ${sugestao.variante}` : ''}
@@ -404,6 +420,17 @@ export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorV
                   {sugestao.marca_nome} · {reais(sugestao.preco_sugerido_centavos)} · {sugestao.ciclo}
                 </p>
               </div>
+            )}
+
+            {!sugestao && (
+              <PesquisaOnline
+                codigo={codigoNaoCadastrado}
+                token={sessionToken ?? null}
+                onUsar={(dados) => {
+                  setDadosOnline(dados);
+                  setModalCadastroAberto(true);
+                }}
+              />
             )}
 
             <div className="flex flex-col gap-2 pt-2">
@@ -446,8 +473,14 @@ export function VisorView({ sessionToken, onSelecionarProdutoParaFluxo }: VisorV
         <ProdutoModal
           isOpen={modalCadastroAberto}
           codigoPrePreenchido={codigoNaoCadastrado || undefined}
+          dadosIniciais={
+            dadosOnline
+              ? { nome: dadosOnline.nome, marcaNome: dadosOnline.marca_nome, precoCentavos: dadosOnline.preco_medio_centavos, imagemUrl: dadosOnline.imagem_url }
+              : null
+          }
           onClose={() => {
             setModalCadastroAberto(false);
+            setDadosOnline(null);
             setCodigoNaoCadastrado(null);
           }}
           onProdutoSalvo={handleProdutoCadastradoComSucesso}

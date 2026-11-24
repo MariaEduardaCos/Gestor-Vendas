@@ -6,8 +6,15 @@ import {
   createProblemDetails,
   classificarCodigo,
   variantesCodigoBarras,
+  digitoVerificadorValido,
+  hojeNoFuso,
   type ProvenienciaCusto
 } from '@consultorasync/core';
+import { consultarCodigoOnline, consultaOnlineDisponivel, FontesIndisponiveis, imagemSegura } from '../services/consulta-online.js';
+
+/** Limite diário de pesquisas online novas por operação (as fontes gratuitas têm cota pequena). */
+const LIMITE_PESQUISAS_DIA = 40;
+const pesquisasDoDia = new Map<string, { dia: string; quantidade: number }>();
 
 /**
  * Situação do produto frente ao catálogo da marca: "fora do ciclo" quando veio de um catálogo
@@ -35,6 +42,7 @@ interface ProdutoBody {
   variante?: string | null;
   codigo_barras?: string | null;
   codigo_revista?: string | null;
+  imagem_url?: string | null;
   preco_venda_centavos: number;
   custo_manual_centavos?: number | null;
   custo_centavos?: number | null;
@@ -60,6 +68,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
         variante,
         codigo_barras,
         codigo_revista,
+        imagem_url,
         preco_venda_centavos,
         custo_manual_centavos,
         custo_centavos,
@@ -124,6 +133,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
           variante: produtoDomain.variante,
           codigo_barras: produtoDomain.codigoBarras,
           codigo_revista: produtoDomain.codigoRevista,
+          imagem_url: imagemSegura(imagem_url),
           preco_venda_centavos: produtoDomain.precoVendaCentavos,
           custo_centavos: produtoDomain.custoCentavos,
           proveniencia_custo: produtoDomain.provenienciaCusto,
@@ -157,6 +167,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
         variante: produto.variante,
         codigo_barras: produto.codigo_barras,
         codigo_revista: produto.codigo_revista,
+        imagem_url: produto.imagem_url,
         ...infoCiclo(produto),
         preco_venda_centavos: produto.preco_venda_centavos,
         preco_venda_formatado: produtoDomain.precoVendaFormatado,
@@ -192,11 +203,11 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
         const porCodigo = filtroPorCodigo(termo);
         const soNumeros = termo.replace(/[\s.\-/]/g, '');
         whereClause.OR = [
-          { nome: { contains: termo } },
-          { variante: { contains: termo } },
+          { nome: { contains: termo, mode: 'insensitive' } },
+          { variante: { contains: termo, mode: 'insensitive' } },
           { codigo_barras: { contains: /^\d+$/.test(soNumeros) ? soNumeros : termo } },
           { codigo_revista: { contains: /^\d+$/.test(soNumeros) ? soNumeros : termo } },
-          { marca: { nome: { contains: termo } } },
+          { marca: { nome: { contains: termo, mode: 'insensitive' } } },
           ...(porCodigo ? [porCodigo] : [])
         ];
       }
@@ -236,6 +247,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
             variante: p.variante,
             codigo_barras: p.codigo_barras,
             codigo_revista: p.codigo_revista,
+            imagem_url: p.imagem_url,
             ...infoCiclo(p),
             preco_venda_centavos: p.preco_venda_centavos,
             preco_venda_formatado: precoFormatado,
@@ -248,6 +260,47 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
           };
         })
       );
+    }
+  );
+
+  // GET /api/produtos/consulta-online/:codigo - Pesquisa na internet um código de barras que
+  // não está no banco: nome, marca, preço médio e foto, para preencher o cadastro (com revisão).
+  fastify.get<{ Params: { codigo: string } }>(
+    '/api/produtos/consulta-online/:codigo',
+    { preHandler: fastify.requireSession },
+    async (request, reply) => {
+      const problema = (status: number, tipo: string, titulo: string, detalhe: string) =>
+        reply.status(status).type('application/problem+json').send(createProblemDetails(status, tipo, titulo, detalhe));
+
+      const c = classificarCodigo(request.params.codigo);
+      if (c.tipo !== 'BARRAS') {
+        return problema(400, 'BAD_REQUEST', 'Código inválido', 'A pesquisa online funciona só com o código de barras da embalagem (8 a 14 números).');
+      }
+      if (!digitoVerificadorValido(c.valor)) {
+        return problema(400, 'BAD_REQUEST', 'Código com erro', 'Este código de barras parece ter um número errado. Confira e tente de novo.');
+      }
+      if (!consultaOnlineDisponivel()) {
+        return problema(503, 'SERVICE_UNAVAILABLE', 'Pesquisa indisponível', 'A pesquisa online está desligada neste servidor.');
+      }
+
+      const operacaoId = request.session!.operacaoId;
+      const hoje = hojeNoFuso();
+      const uso = pesquisasDoDia.get(operacaoId);
+      const usadas = uso?.dia === hoje ? uso.quantidade : 0;
+
+      try {
+        // Código já guardado não gasta a cota; só bloqueia quando precisaria consultar as fontes de novo.
+        const guardado = await fastify.prisma.consultaCodigoOnline.findUnique({ where: { codigo_barras: c.valor }, select: { codigo_barras: true } });
+        if (!guardado && usadas >= LIMITE_PESQUISAS_DIA) {
+          return problema(429, 'TOO_MANY_REQUESTS', 'Limite de pesquisas', `Você já fez ${LIMITE_PESQUISAS_DIA} pesquisas online hoje. Cadastre este produto à mão ou tente amanhã.`);
+        }
+        const resultado = await consultarCodigoOnline(fastify.prisma, c.valor, { buscador: fastify.buscadorOnline });
+        if (!resultado.do_cache) pesquisasDoDia.set(operacaoId, { dia: hoje, quantidade: usadas + 1 });
+        return reply.send({ codigo_barras: c.valor, encontrado: resultado.encontrado, do_cache: resultado.do_cache, ...(resultado.produto ?? {}) });
+      } catch (e) {
+        if (e instanceof FontesIndisponiveis) return problema(503, 'SERVICE_UNAVAILABLE', 'Pesquisa indisponível', e.message);
+        throw e;
+      }
     }
   );
 
@@ -277,6 +330,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
             variante: p.variante,
             codigo_barras: p.codigo_barras,
             codigo_revista: p.codigo_revista,
+            imagem_url: p.imagem_url,
             ...infoCiclo(p),
             preco_venda_centavos: p.preco_venda_centavos,
             preco_venda_formatado: Centavos.deInteiro(p.preco_venda_centavos).paraFormatado(),
@@ -347,6 +401,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
         variante: produto.variante,
         codigo_barras: produto.codigo_barras,
         codigo_revista: produto.codigo_revista,
+        imagem_url: produto.imagem_url,
         ...infoCiclo(produto),
         preco_venda_centavos: produto.preco_venda_centavos,
         preco_venda_formatado: precoFormatado,
@@ -399,6 +454,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
         variante: produto.variante,
         codigo_barras: produto.codigo_barras,
         codigo_revista: produto.codigo_revista,
+        imagem_url: produto.imagem_url,
         ...infoCiclo(produto),
         preco_venda_centavos: produto.preco_venda_centavos,
         preco_venda_formatado: precoFormatado,
@@ -423,6 +479,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
         variante,
         codigo_barras,
         codigo_revista,
+        imagem_url,
         preco_venda_centavos,
         custo_manual_centavos,
         custo_centavos,
@@ -585,6 +642,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
           variante: produtoDomain.variante,
           codigo_barras: produtoDomain.codigoBarras,
           codigo_revista: produtoDomain.codigoRevista,
+          ...(imagem_url !== undefined ? { imagem_url: imagemSegura(imagem_url) } : {}),
           preco_venda_centavos: produtoDomain.precoVendaCentavos,
           custo_centavos: produtoDomain.custoCentavos,
           proveniencia_custo: produtoDomain.provenienciaCusto,
@@ -617,6 +675,7 @@ export const produtosRoutes: FastifyPluginAsync = async (fastify) => {
         variante: atualizado.variante,
         codigo_barras: atualizado.codigo_barras,
         codigo_revista: atualizado.codigo_revista,
+        imagem_url: atualizado.imagem_url,
         ...infoCiclo(atualizado),
         preco_venda_centavos: atualizado.preco_venda_centavos,
         preco_venda_formatado: produtoDomain.precoVendaFormatado,

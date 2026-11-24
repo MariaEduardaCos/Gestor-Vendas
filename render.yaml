@@ -1,0 +1,22 @@
+# Render Blueprint: um serviço web grátis que serve a API e as telas no mesmo endereço.
+# O banco é o PostgreSQL do Supabase; o endereço dele (DATABASE_URL) é colado no painel do Render.
+services:
+  - type: web
+    name: consultorasync
+    runtime: node
+    plan: free
+    region: virginia
+    branch: main
+    buildCommand: npm ci --include=dev && npm run prisma:generate -w @consultorasync/server && npm run build
+    # Cria ou atualiza as tabelas sem apagar dados (falha se uma mudança exigir apagar algo).
+    startCommand: cd packages/server && npx prisma db push --skip-generate && node dist/index.js
+    healthCheckPath: /api/auth/config
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false

@@ -66,6 +66,7 @@ export function verifySessionToken(token: string, secret = segredoSessao()): Ses
 declare module 'fastify' {
   interface FastifyInstance {
     prisma: PrismaClient;
+    buscadorOnline: import('../services/consulta-online.js').Buscador;
     requireSession: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
   interface FastifyRequest {

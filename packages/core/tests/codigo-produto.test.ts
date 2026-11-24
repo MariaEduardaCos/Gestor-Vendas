@@ -58,3 +58,14 @@ describe('Catálogo do ciclo com código da revista', () => {
     expect(() => new Produto({ operacaoId: 'op', nome: 'X', codigoRevista: '12', precoVendaCentavos: 100 })).toThrow(/revista/);
   });
 });
+
+describe('Dígito verificador do código de barras', () => {
+  it('aceita códigos reais e recusa dígito trocado ou tamanho errado', async () => {
+    const { digitoVerificadorValido } = await import('../src/domain/codigo-produto');
+    expect(digitoVerificadorValido('7908132258012')).toBe(true); // EAN-13
+    expect(digitoVerificadorValido('036000291452')).toBe(true); // UPC-A
+    expect(digitoVerificadorValido('96385074')).toBe(true); // EAN-8
+    expect(digitoVerificadorValido('7908132258013')).toBe(false);
+    expect(digitoVerificadorValido('71612')).toBe(false);
+  });
+});

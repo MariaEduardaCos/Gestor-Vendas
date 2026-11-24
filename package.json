@@ -13,9 +13,13 @@
     "start:server": "node packages/server/dist/index.js",
     "start:web": "npm --prefix packages/web run dev",
     "dev": "npm run build && NODE_ENV=development node packages/server/dist/index.js & npm --prefix packages/web run dev",
-    "dev:celular": "npm --prefix packages/web run dev:celular"
+    "dev:celular": "npm --prefix packages/web run dev:celular",
+    "db:local": "bash packages/server/scripts/postgres-local.sh"
   },
   "devDependencies": {
     "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

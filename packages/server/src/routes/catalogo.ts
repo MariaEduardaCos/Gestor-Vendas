@@ -11,6 +11,7 @@ import {
   type LinhaCatalogo
 } from '@consultorasync/core';
 import type { PrismaClient } from '@prisma/client';
+import { imagemSegura } from '../services/consulta-online.js';
 
 interface ImportarCatalogoBody {
   ciclo: string;
@@ -115,6 +116,7 @@ export const catalogoRoutes: FastifyPluginAsync = async (fastify) => {
                 variante: novo.variante,
                 codigo_barras: novo.codigoBarras,
                 codigo_revista: novo.codigoRevista,
+                imagem_url: imagemSegura(linha.imagemUrl),
                 preco_venda_centavos: novo.precoVendaCentavos,
                 custo_centavos: novo.custoCentavos,
                 proveniencia_custo: novo.provenienciaCusto,
@@ -131,7 +133,8 @@ export const catalogoRoutes: FastifyPluginAsync = async (fastify) => {
               data: {
                 ciclo_catalogo: cicloLimpo,
                 codigo_barras: atual.codigo_barras ?? linha.codigoBarras,
-                codigo_revista: linha.codigoRevista ?? atual.codigo_revista
+                codigo_revista: linha.codigoRevista ?? atual.codigo_revista,
+                imagem_url: atual.imagem_url ?? imagemSegura(linha.imagemUrl)
               }
             });
             continue;
@@ -158,6 +161,7 @@ export const catalogoRoutes: FastifyPluginAsync = async (fastify) => {
               proveniencia_custo: atualizado.provenienciaCusto,
               codigo_barras: atualizado.codigoBarras,
               codigo_revista: linha.codigoRevista ?? atual.codigo_revista,
+              imagem_url: atual.imagem_url ?? imagemSegura(linha.imagemUrl),
               ciclo_catalogo: cicloLimpo
             }
           });
@@ -205,13 +209,16 @@ export const catalogoRoutes: FastifyPluginAsync = async (fastify) => {
         where: { marca_chave: normalizarTexto(marca.nome) },
         orderBy: [{ nome: 'asc' }, { variante: 'asc' }]
       });
-      const maisRecente = refs.reduce<(typeof refs)[number] | null>((m, r) => (!m || r.atualizado_em > m.atualizado_em ? r : m), null);
+      const { itens: lista, oficial } = referenciasDaCampanhaAtual(refs);
+      const maisRecente = lista.reduce<(typeof refs)[number] | null>((m, r) => (!m || r.atualizado_em > m.atualizado_em ? r : m), null);
       return reply.send({
         marca_nome: marca.nome,
         ciclo: maisRecente?.ciclo ?? null,
+        oficial,
         atualizado_em: maisRecente?.atualizado_em.toISOString() ?? null,
-        quantidade: refs.length,
-        itens: refs.map((r) => ({
+        quantidade: lista.length,
+        itens: lista.map((r) => ({
+          imagemUrl: r.imagem_url,
           codigoBarras: r.codigo_barras,
           codigoRevista: r.codigo_revista,
           nome: r.nome,
@@ -249,39 +256,72 @@ export const catalogoRoutes: FastifyPluginAsync = async (fastify) => {
           variante: r.variante,
           codigo_barras: r.codigo_barras,
           codigo_revista: r.codigo_revista,
+          imagem_url: r.imagem_url,
           preco_sugerido_centavos: r.preco_sugerido_centavos,
-          ciclo: r.ciclo
+          ciclo: r.ciclo,
+          oficial: r.origem === 'OFICIAL'
         }))
       );
     }
   );
 };
 
-/** Grava/atualiza a referência compartilhada da marca. Nunca leva dados da operação além do catálogo. */
+/**
+ * Lista de referência que vale para a marca: se houver carga oficial, só os produtos da
+ * campanha oficial mais recente; senão, tudo o que as revendedoras compartilharam.
+ */
+export function referenciasDaCampanhaAtual<T extends { origem: string; ciclo: string; atualizado_em: Date }>(refs: T[]): { itens: T[]; oficial: boolean } {
+  const oficiais = refs.filter((r) => r.origem === 'OFICIAL');
+  if (oficiais.length === 0) return { itens: refs, oficial: false };
+  const cicloAtual = oficiais.reduce((m, r) => (r.atualizado_em > m.atualizado_em ? r : m)).ciclo;
+  return { itens: oficiais.filter((r) => r.ciclo === cicloAtual), oficial: true };
+}
+
+/**
+ * Grava/atualiza a referência compartilhada da marca. Nunca leva dados da operação além do catálogo.
+ * Dado da carga oficial não é sobrescrito por contribuição do mesmo ciclo (só ganha o código que faltar);
+ * contribuição de um ciclo diferente passa a valer, até a próxima carga oficial.
+ */
 export async function contribuirCatalogoCompartilhado(db: PrismaClient, marcaNome: string, ciclo: string, linhas: LinhaCatalogo[]) {
   const marcaChave = normalizarTexto(marcaNome);
   for (const l of linhas) {
     const chave = chaveProdutoCatalogo(l);
-    await db.produtoReferencia.upsert({
-      where: { marca_chave_chave: { marca_chave: marcaChave, chave } },
-      create: {
-        id: gerarUuidV7(),
-        marca_chave: marcaChave,
-        marca_nome: marcaNome,
-        chave,
-        nome: l.nome,
-        variante: l.variante,
-        codigo_barras: l.codigoBarras,
-        codigo_revista: l.codigoRevista ?? null,
-        preco_sugerido_centavos: l.precoVendaCentavos,
-        ciclo
-      },
-      update: {
+    const existente = await db.produtoReferencia.findUnique({ where: { marca_chave_chave: { marca_chave: marcaChave, chave } } });
+    if (!existente) {
+      await db.produtoReferencia.create({
+        data: {
+          id: gerarUuidV7(),
+          marca_chave: marcaChave,
+          marca_nome: marcaNome,
+          chave,
+          nome: l.nome,
+          variante: l.variante,
+          codigo_barras: l.codigoBarras,
+          codigo_revista: l.codigoRevista ?? null,
+          preco_sugerido_centavos: l.precoVendaCentavos,
+          ciclo
+        }
+      });
+      continue;
+    }
+    const codigosQueFaltam = {
+      ...(l.codigoRevista && !existente.codigo_revista ? { codigo_revista: l.codigoRevista } : {}),
+      ...(l.codigoBarras && !existente.codigo_barras ? { codigo_barras: l.codigoBarras } : {})
+    };
+    if (existente.origem === 'OFICIAL' && existente.ciclo === ciclo) {
+      await db.produtoReferencia.update({ where: { id: existente.id }, data: { ...codigosQueFaltam, contribuicoes: { increment: 1 } } });
+      continue;
+    }
+    await db.produtoReferencia.update({
+      where: { id: existente.id },
+      data: {
         nome: l.nome,
         variante: l.variante,
         ...(l.codigoRevista ? { codigo_revista: l.codigoRevista } : {}),
+        ...codigosQueFaltam,
         preco_sugerido_centavos: l.precoVendaCentavos,
         ciclo,
+        origem: 'COMUNIDADE',
         contribuicoes: { increment: 1 }
       }
     });

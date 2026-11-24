@@ -216,7 +216,16 @@ export function ProdutosView({ sessionToken, refreshTrigger }: ProdutosViewProps
               >
                 {/* Topo do Card: Marca e Nome */}
                 <div className="flex items-start justify-between gap-2">
-                  <div>
+                  {p.imagem_url && (
+                    <img
+                      src={p.imagem_url}
+                      alt=""
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      className="w-12 h-12 rounded-md object-contain bg-white border border-border-hairline shrink-0"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
                     {p.marca_nome && (
                       <span className="text-meta font-bold uppercase tracking-wider text-brand-primary block">
                         {p.marca_nome}

@@ -87,7 +87,7 @@ export const marcasRoutes: FastifyPluginAsync = async (fastify) => {
       const marcas = await request.tenantPrisma.marca.findMany({
         where: termo.length > 0
           ? {
-              nome: { contains: termo }
+              nome: { contains: termo, mode: 'insensitive' }
             }
           : {},
         orderBy: { nome: 'asc' },
@@ -96,16 +96,26 @@ export const marcasRoutes: FastifyPluginAsync = async (fastify) => {
 
       // Quantos produtos o catálogo compartilhado tem para cada marca (tabela global, sem dados da operação)
       const chaves = marcas.map((m) => normalizarTexto(m.nome));
-      const contagens = await fastify.prisma.produtoReferencia.groupBy({
-        by: ['marca_chave'],
+      const grupos = await fastify.prisma.produtoReferencia.groupBy({
+        by: ['marca_chave', 'origem', 'ciclo'],
         where: { marca_chave: { in: chaves } },
-        _count: { _all: true }
+        _count: { _all: true },
+        _max: { atualizado_em: true }
       });
-      const porChave = new Map(contagens.map((c) => [c.marca_chave, c._count._all]));
+      // Com carga oficial, vale a campanha oficial mais recente; sem ela, tudo o que foi compartilhado.
+      const referencia = (chave: string) => {
+        const daMarca = grupos.filter((g) => g.marca_chave === chave);
+        const oficiais = daMarca.filter((g) => g.origem === 'OFICIAL');
+        if (oficiais.length === 0) return { quantidade: daMarca.reduce((t, g) => t + g._count._all, 0), cicloOficial: null as string | null };
+        const atual = oficiais.reduce((m, g) => ((g._max.atualizado_em ?? 0) > (m._max.atualizado_em ?? 0) ? g : m));
+        return { quantidade: atual._count._all, cicloOficial: atual.ciclo };
+      };
 
       return reply.status(200).send(
         marcas.map((m) => ({
-          catalogo_compartilhado_quantidade: porChave.get(normalizarTexto(m.nome)) ?? 0,
+          catalogo_compartilhado_quantidade: referencia(normalizarTexto(m.nome)).quantidade,
+          /** Ciclo da carga oficial disponível para esta marca (null se só houver lista das revendedoras). */
+          catalogo_oficial_ciclo: referencia(normalizarTexto(m.nome)).cicloOficial,
           id: m.id,
           operacao_id: m.operacao_id,
           nome: m.nome,

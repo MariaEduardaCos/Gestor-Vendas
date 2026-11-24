@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApiGet, formatarReais } from '../lib/api';
 import { CabecalhoPagina, Cartao, Indicador } from '../layout/ui';
 import type { ResumoFinanceiro } from '../types/gestao';
+import { BoletosCartao } from './BoletosCartao';
 
 export function FinanceiroPage() {
   const navegar = useNavigate();
@@ -34,6 +35,8 @@ export function FinanceiroPage() {
           O ganho por venda depende do custo de cada produto (informado ou estimado pelo percentual da marca) e ainda não é exibido aqui.
         </p>
       </Cartao>
+
+      <BoletosCartao />
     </>
   );
 }

@@ -6,6 +6,7 @@ import { ProdutoModal } from '../../components/ProdutoModal';
 import { useSessao } from '../SessaoContext';
 import { apiFetch, formatarReais } from '../../lib/api';
 import type { ProdutoDTO } from '../../types/produto';
+import { PesquisaOnline, type DadosOnline } from './PesquisaOnline';
 
 interface Sugestao {
   marca_nome: string;
@@ -13,6 +14,8 @@ interface Sugestao {
   variante: string | null;
   codigo_barras: string | null;
   codigo_revista: string | null;
+  imagem_url?: string | null;
+  oficial?: boolean;
   preco_sugerido_centavos: number;
   ciclo: string;
 }
@@ -44,6 +47,7 @@ export function BipadorProdutos({ produtos, onProduto, onProdutoCadastrado }: Pr
   const [cadastrando, setCadastrando] = useState(false);
   const [sugestao, setSugestao] = useState<Sugestao | null>(null);
   const [escolhas, setEscolhas] = useState<ProdutoDTO[]>([]);
+  const [dadosOnline, setDadosOnline] = useState<DadosOnline | null>(null);
 
   const aceitar = (produto: ProdutoDTO) => {
     setEscolhas([]);
@@ -94,7 +98,7 @@ export function BipadorProdutos({ produtos, onProduto, onProdutoCadastrado }: Pr
       .then((lista) => {
         if (lista[0]) {
           setSugestao(lista[0]);
-          setMensagem({ texto: `Encontrado no catálogo compartilhado.`, tom: 'ok' });
+          setMensagem({ texto: lista[0].oficial ? 'Encontrado no catálogo da campanha.' : 'Encontrado no catálogo compartilhado.', tom: 'ok' });
         }
       })
       .catch(() => undefined);
@@ -112,6 +116,7 @@ export function BipadorProdutos({ produtos, onProduto, onProdutoCadastrado }: Pr
           variante: s.variante,
           codigo_barras: s.codigo_barras,
           codigo_revista: s.codigo_revista,
+          imagem_url: s.imagem_url ?? null,
           preco_venda_centavos: s.preco_sugerido_centavos
         })
       });
@@ -178,7 +183,7 @@ export function BipadorProdutos({ produtos, onProduto, onProdutoCadastrado }: Pr
           <span className="flex-1 min-w-[180px]">
             <strong>{sugestao.nome}</strong>
             {sugestao.variante ? ` — ${sugestao.variante}` : ''} · {sugestao.marca_nome} · {formatarReais(sugestao.preco_sugerido_centavos)}
-            <span className="text-ink-muted"> ({sugestao.ciclo})</span>
+            <span className="text-ink-muted"> ({sugestao.oficial ? 'campanha ' : ''}{sugestao.ciclo})</span>
           </span>
           <button type="button" onClick={() => usarSugestao(sugestao)} className="min-h-[36px] px-3 rounded-md bg-status-available text-ink-inverse font-semibold">
             Usar este produto
@@ -200,15 +205,34 @@ export function BipadorProdutos({ produtos, onProduto, onProdutoCadastrado }: Pr
           )}
         </div>
       )}
+      {codigoDesconhecido && !sugestao && (
+        <PesquisaOnline
+          codigo={codigoDesconhecido}
+          token={token}
+          onUsar={(dados) => {
+            setDadosOnline(dados);
+            setCadastrando(true);
+          }}
+        />
+      )}
       {/* Portal: o cadastro abre por cima de tudo, fora da área com rolagem da venda/encomenda */}
       {createPortal(
       <ProdutoModal
         isOpen={cadastrando}
         codigoPrePreenchido={codigoDesconhecido ?? undefined}
+        dadosIniciais={
+          dadosOnline
+            ? { nome: dadosOnline.nome, marcaNome: dadosOnline.marca_nome, precoCentavos: dadosOnline.preco_medio_centavos, imagemUrl: dadosOnline.imagem_url }
+            : null
+        }
         sessionToken={token ?? undefined}
-        onClose={() => setCadastrando(false)}
+        onClose={() => {
+          setCadastrando(false);
+          setDadosOnline(null);
+        }}
         onProdutoSalvo={(produto) => {
           setCadastrando(false);
+          setDadosOnline(null);
           setCodigoDesconhecido(null);
           setMensagem({ texto: `Cadastrado: ${produto.nome}`, tom: 'ok' });
           onProdutoCadastrado(produto);

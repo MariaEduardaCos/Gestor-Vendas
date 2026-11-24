@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { travarEstoque } from '../db/bloqueio-estoque.js';
 import {
   CompraMarca,
   ItemCompraMarca,
@@ -31,6 +32,25 @@ interface ComprasQuery {
 
 interface PendenciasQuery {
   marca_id?: string;
+}
+
+/** Junta ao espelho os dados que a revendedora digita no site da marca: nome, códigos e foto. */
+function espelhoComProdutos<T extends { produtoId: string }>(
+  espelho: T[],
+  produtos: Array<{ id: string; nome: string; variante: string | null; codigo_revista: string | null; codigo_barras: string | null; imagem_url: string | null }>
+) {
+  const porId = new Map(produtos.map((p) => [p.id, p]));
+  return espelho.map((linha) => {
+    const p = porId.get(linha.produtoId);
+    return {
+      ...linha,
+      produtoNome: p?.nome ?? 'Produto',
+      variante: p?.variante ?? null,
+      codigoRevista: p?.codigo_revista ?? null,
+      codigoBarras: p?.codigo_barras ?? null,
+      imagemUrl: p?.imagem_url ?? null
+    };
+  });
 }
 
 export const comprasRoutes: FastifyPluginAsync = async (fastify) => {
@@ -73,6 +93,9 @@ export const comprasRoutes: FastifyPluginAsync = async (fastify) => {
         produto_id: item.produto_id,
         produto_nome: item.produto.nome,
         variante: item.produto.variante,
+        codigo_revista: item.produto.codigo_revista,
+        codigo_barras: item.produto.codigo_barras,
+        imagem_url: item.produto.imagem_url,
         marca_id: item.produto.marca_id,
         marca_nome: item.produto.marca?.nome || null,
         quantidade: item.quantidade,
@@ -364,7 +387,10 @@ export const comprasRoutes: FastifyPluginAsync = async (fastify) => {
         itens: domainItens
       });
 
-      const espelho = domainCompra.gerarEspelhoPorProduto();
+      const espelho = espelhoComProdutos(
+        domainCompra.gerarEspelhoPorProduto(),
+        await request.tenantPrisma.produto.findMany({ where: { id: { in: itensProcessados.map((i) => i.produto_id) } } })
+      );
 
       return reply.status(201).send({
         id: domainCompra.id,
@@ -527,7 +553,7 @@ export const comprasRoutes: FastifyPluginAsync = async (fastify) => {
         itens: domainItens
       });
 
-      const espelho = domainCompra.gerarEspelhoPorProduto();
+      const espelho = espelhoComProdutos(domainCompra.gerarEspelhoPorProduto(), compra.itens.map((it) => it.produto));
 
       return reply.send({
         id: domainCompra.id,
@@ -847,6 +873,7 @@ export const comprasRoutes: FastifyPluginAsync = async (fastify) => {
           itensAtualizados.push(itemAtualizado);
 
           // B. Obter ou Criar EstoqueItem (Invariante AD-3: Presentes = Reservados + ProntaEntrega)
+          await travarEstoque(tx, session.operacaoId, itemCompra.produto_id);
           let estoque = await tx.estoqueItem.findUnique({
             where: {
               operacao_id_produto_id: {

@@ -15,3 +15,5 @@ dist/
 *.db-journal
 *.db-wal
 *.db-shm
+.pg-local/
+packages/server/.env.supabase

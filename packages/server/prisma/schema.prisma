@@ -1,5 +1,5 @@
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -30,6 +30,7 @@ model Operacao {
   excedentes_pendentes ExcedentePendente[]
   contatos_cobranca ContatoCobranca[]
   parcelas_conta   ParcelaConta[]
+  boletos          Boleto[]
 
   @@map("operacoes")
 }
@@ -186,6 +187,7 @@ model Marca {
   operacao      Operacao      @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
   produtos      Produto[]
   compras_marca CompraMarca[]
+  boletos       Boleto[]
 
   @@index([operacao_id])
   @@index([operacao_id, nome])
@@ -201,6 +203,8 @@ model Produto {
   codigo_barras        String?
   /// Código impresso na revista do ciclo (3 a 7 números), usado no pedido à marca
   codigo_revista       String?
+  /// Endereço (https) da foto do produto, quando veio do catálogo ou da pesquisa online
+  imagem_url           String?
   preco_venda_centavos Int
   custo_centavos       Int?
   proveniencia_custo   String   @default("DESCONHECIDO")
@@ -288,6 +292,7 @@ model CompraMarca {
   operacao Operacao          @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
   marca    Marca             @relation(fields: [marca_id], references: [id], onDelete: Restrict)
   itens    ItemCompraMarca[]
+  boletos  Boleto[]
 
   @@index([operacao_id])
   @@index([marca_id])
@@ -428,8 +433,11 @@ model ProdutoReferencia {
   variante                String?
   codigo_barras           String?
   codigo_revista          String?
+  imagem_url              String?
   preco_sugerido_centavos Int
   ciclo                   String
+  /// "OFICIAL": carga da campanha feita pela administração do sistema; "COMUNIDADE": revendedoras
+  origem                  String   @default("COMUNIDADE")
   contribuicoes           Int      @default(1)
   atualizado_em           DateTime @updatedAt
 
@@ -437,6 +445,21 @@ model ProdutoReferencia {
   @@index([codigo_barras])
   @@index([marca_chave, codigo_revista])
   @@map("produtos_referencia")
+}
+
+/// Resultado guardado da pesquisa online por código de barras (dados públicos do produto,
+/// sem operacao_id). Evita gastar o limite diário das fontes com o mesmo código.
+model ConsultaCodigoOnline {
+  codigo_barras        String   @id
+  encontrado           Boolean
+  nome                 String?
+  marca_nome           String?
+  preco_medio_centavos Int?
+  imagem_url           String?
+  fonte                String?
+  consultado_em        DateTime @default(now())
+
+  @@map("consultas_codigo_online")
 }
 
 /// Registro de cada vez que a revendedora cobrou ou lembrou uma cliente (fila de cobrança do dia).
@@ -457,4 +480,28 @@ model ContatoCobranca {
   @@index([operacao_id, criado_em])
   @@index([cliente_id])
   @@map("contatos_cobranca")
+}
+
+/// Boleto que a revendedora paga à marca (normalmente um por pedido).
+model Boleto {
+  id              String    @id
+  operacao_id     String
+  marca_id        String?
+  compra_id       String?
+  descricao       String
+  valor_centavos  Int
+  vencimento      DateTime
+  linha_digitavel String?
+  status          String    @default("ABERTO") // "ABERTO" | "PAGO"
+  pago_em         DateTime?
+  criado_em       DateTime  @default(now())
+  atualizado_em   DateTime  @updatedAt
+
+  operacao Operacao     @relation(fields: [operacao_id], references: [id], onDelete: Cascade)
+  marca    Marca?       @relation(fields: [marca_id], references: [id], onDelete: SetNull)
+  compra   CompraMarca? @relation(fields: [compra_id], references: [id], onDelete: SetNull)
+
+  @@index([operacao_id])
+  @@index([operacao_id, status, vencimento])
+  @@map("boletos")
 }
