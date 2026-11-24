@@ -53,7 +53,8 @@ export async function carregarCatalogoOficial(
         criados++;
       }
     }
-  });
+    // Banco remoto: mil produtos levam mais que os 5 segundos padrão de uma transação.
+  }, { timeout: 180_000, maxWait: 15_000 });
 
   return { marca, ciclo: cicloLimpo, criados, atualizados, total: linhas.length };
 }

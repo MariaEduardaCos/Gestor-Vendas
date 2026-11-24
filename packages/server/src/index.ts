@@ -1,4 +1,5 @@
 import { buildApp } from './app.js';
+import { carregarCatalogosIniciais } from './services/catalogos-iniciais.js';
 
 export * from './app.js';
 export * from './db/tenant-prisma.js';
@@ -14,6 +15,8 @@ async function start() {
   try {
     await app.listen({ port, host });
     console.log(`[ConsultoraSync Server] Servidor escutando em http://${host}:${port}`);
+    // Em segundo plano: o servidor já atende enquanto os catálogos carregam.
+    carregarCatalogosIniciais(app.prisma, (m) => app.log.info(m)).catch((e) => app.log.error(e, 'Falha ao carregar catálogos iniciais'));
   } catch (err) {
     app.log.error(err);
     process.exit(1);
