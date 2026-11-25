@@ -121,14 +121,14 @@ export function ClienteDrawer({
       role="dialog"
       aria-modal="true"
       aria-label="Cadastrar Nova Cliente"
-      className="fixed inset-0 z-60 flex flex-col justify-end bg-ink-primary/50 backdrop-blur-sm transition-opacity"
+      className="fixed inset-0 z-60 flex flex-col justify-end sm:justify-center sm:p-4 bg-ink-primary/50 backdrop-blur-sm transition-opacity"
       onClick={(e) => {
         if (e.target === e.currentTarget && !salvando) onClose();
       }}
     >
-      <div className="w-full max-w-md mx-auto bg-surface-raised rounded-t-2xl p-5 shadow-2xl flex flex-col gap-4 animate-slide-up border-t border-border-hairline">
-        {/* Puxador decorativo */}
-        <div className="w-11 h-1.5 bg-border-strong rounded-full mx-auto" />
+      <div className="w-full max-w-md mx-auto bg-surface-raised rounded-t-2xl sm:rounded-2xl p-5 shadow-2xl flex flex-col gap-4 animate-slide-up border-t sm:border border-border-hairline">
+        {/* Puxador decorativo (só no celular, onde a tela sobe de baixo) */}
+        <div className="w-11 h-1.5 bg-border-strong rounded-full mx-auto sm:hidden" />
 
         {/* Cabeçalho */}
         <div className="flex items-center justify-between">

@@ -434,7 +434,7 @@ export function EncomendaModal({
               type="button"
               disabled={salvando || itens.length === 0}
               onClick={handleSalvarEncomenda}
-              className="flex-2 min-h-touch-target bg-brand-primary hover:bg-brand-hover text-ink-inverse font-bold text-label-strong rounded-md flex items-center justify-center gap-2 shadow-sm transition-colors disabled:opacity-50"
+              className="flex-[2] min-h-touch-target px-4 py-2 bg-brand-primary hover:bg-brand-hover text-ink-inverse font-semibold text-body-md rounded-md flex items-center justify-center gap-2 shadow-sm transition-colors disabled:opacity-50"
             >
               {salvando ? 'Salvando Encomenda...' : 'Confirmar Encomenda'}
             </button>
