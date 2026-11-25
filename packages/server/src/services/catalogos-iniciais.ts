@@ -17,10 +17,12 @@ interface ItemArquivo extends LinhaCatalogo {
 
 /**
  * Num banco novo (ex.: o primeiro deploy), carrega os catálogos oficiais que estão no repositório.
- * Não faz nada se já existir qualquer produto oficial: nunca sobrescreve cargas feitas depois.
+ * Não faz nada se já existir produto oficial com ordem de vitrine: nunca sobrescreve cargas feitas depois.
  */
 export async function carregarCatalogosIniciais(db: PrismaClient, log: (msg: string) => void): Promise<void> {
-  if ((await db.produtoReferencia.count({ where: { origem: 'OFICIAL' } })) > 0) return;
+  // Já carregado (com a ordem da vitrine) → nada a fazer. Bancos carregados antes da coluna
+  // "posicao" passam pela carga de novo, que só atualiza os produtos e preenche a ordem.
+  if ((await db.produtoReferencia.count({ where: { origem: 'OFICIAL', posicao: { not: null } } })) > 0) return;
 
   const pasta = process.env.CATALOGOS_DIR ||
     path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../analise-replica/catalogos');

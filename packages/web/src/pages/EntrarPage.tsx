@@ -3,6 +3,7 @@ import { useSessao, type SessaoInfo } from '../app/SessaoContext';
 import { apiFetch } from '../lib/api';
 
 const CHAVE_ULTIMO_USUARIO = 'consultorasync_ultimo_usuario';
+const MARCAS_PRINCIPAIS = ['Natura', 'O Boticário', 'Eudora'];
 
 interface RespostaSessao {
   token: string;
@@ -54,11 +55,19 @@ export function EntrarPage() {
   const [novoUsuario, setNovoUsuario] = useState('');
   const [novoPin, setNovoPin] = useState('');
   const [confirmaPin, setConfirmaPin] = useState('');
+  const [marcasDisponiveis, setMarcasDisponiveis] = useState<Array<{ marca: string; produtos: number }>>([]);
+  const [marcasEscolhidas, setMarcasEscolhidas] = useState<string[]>([]);
 
   useEffect(() => {
     fetch('/api/auth/config')
       .then((r) => (r.ok ? r.json() : null))
-      .then((c) => setModoDev(!!c?.modo_desenvolvimento))
+      .then((c) => {
+        setModoDev(!!c?.modo_desenvolvimento);
+        const marcas: Array<{ marca: string; produtos: number }> = Array.isArray(c?.marcas_iniciais) ? c.marcas_iniciais : [];
+        setMarcasDisponiveis(marcas);
+        // Já vêm marcadas as marcas principais das revendedoras; as outras ficam à escolha.
+        setMarcasEscolhidas(marcas.map((m) => m.marca).filter((m) => MARCAS_PRINCIPAIS.includes(m)));
+      })
       .catch(() => undefined);
   }, []);
 
@@ -98,7 +107,7 @@ export function EntrarPage() {
     executar(async () => {
       const r = await apiFetch<RespostaSessao>('/auth/cadastro', null, {
         method: 'POST',
-        body: JSON.stringify({ nome_negocio: nomeNegocio, nome, usuario: u, pin: novoPin })
+        body: JSON.stringify({ nome_negocio: nomeNegocio, nome, usuario: u, pin: novoPin, marcas_iniciais: marcasEscolhidas })
       });
       concluir(r, u);
     });
@@ -218,12 +227,43 @@ export function EntrarPage() {
                   />
                 </Campo>
               </div>
+              {marcasDisponiveis.length > 0 && (
+                <fieldset className="flex flex-col gap-1.5">
+                  <legend className="text-label-strong">Já começar com os produtos mais vendidos de:</legend>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {marcasDisponiveis.map(({ marca, produtos }) => {
+                      const marcada = marcasEscolhidas.includes(marca);
+                      return (
+                        <label
+                          key={marca}
+                          className={`flex items-center gap-2 min-h-touch-target px-3 rounded-md border cursor-pointer text-body-md ${
+                            marcada ? 'border-brand-primary bg-brand-primary/10' : 'border-border-strong'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={marcada}
+                            onChange={() =>
+                              setMarcasEscolhidas((atual) => (marcada ? atual.filter((m) => m !== marca) : [...atual, marca]))
+                            }
+                            className="w-4 h-4 accent-brand-primary"
+                          />
+                          {marca} <span className="text-meta text-ink-muted">({produtos})</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <span className="text-meta text-ink-muted">
+                    Com foto, código e preço da campanha atual. Dá para apagar ou carregar o catálogo inteiro depois.
+                  </span>
+                </fieldset>
+              )}
               <button
                 type="submit"
                 disabled={enviando}
                 className="min-h-touch-target rounded-md bg-brand-primary hover:bg-brand-hover text-ink-inverse font-semibold disabled:opacity-60"
               >
-                {enviando ? 'Criando…' : 'Criar conta e entrar'}
+                {enviando ? (marcasEscolhidas.length > 0 ? 'Criando e carregando produtos…' : 'Criando…') : 'Criar conta e entrar'}
               </button>
             </form>
           )}

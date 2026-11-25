@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
+import { carregarProdutosIniciais, marcasIniciaisDisponiveis } from '../services/produtos-iniciais.js';
 import { createProblemDetails, gerarUuidV7 } from '@consultorasync/core';
 import { createSessionToken } from '../plugins/session.js';
 import { modoDesenvolvimento } from '../config.js';
@@ -102,11 +103,13 @@ function respostaSessao(operacao: { id: string }, operador: { id: string; nome: 
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
   /** O que a tela de entrada precisa saber antes do login. */
   fastify.get('/api/auth/config', async () => ({
-    modo_desenvolvimento: modoDesenvolvimento()
+    modo_desenvolvimento: modoDesenvolvimento(),
+    /** Marcas cujos produtos mais vendidos podem entrar já no cadastro. */
+    marcas_iniciais: await marcasIniciaisDisponiveis(fastify.prisma)
   }));
 
   /** Primeiro acesso: cria o negócio (operação) e a revendedora com usuário e PIN. */
-  fastify.post<{ Body: { nome_negocio?: string; nome?: string; usuario?: string; pin?: string } }>(
+  fastify.post<{ Body: { nome_negocio?: string; nome?: string; usuario?: string; pin?: string; marcas_iniciais?: string[] } }>(
     '/api/auth/cadastro',
     async (request, reply) => {
       const nomeNegocio = request.body?.nome_negocio?.trim();
@@ -132,7 +135,17 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       const operador = await fastify.prisma.operador.create({
         data: { id: gerarUuidV7(), operacao_id: operacao.id, nome, usuario, pin_hash: hashPin(pin), ativo: true }
       });
-      return reply.status(201).send(respostaSessao(operacao, operador));
+      // Produtos mais vendidos das marcas escolhidas. Se falhar, a conta continua criada (dá para carregar depois).
+      const marcasIniciais = Array.isArray(request.body?.marcas_iniciais)
+        ? request.body!.marcas_iniciais!.filter((m): m is string => typeof m === 'string').slice(0, 10)
+        : [];
+      let produtosIniciais: Record<string, number> = {};
+      try {
+        produtosIniciais = await carregarProdutosIniciais(fastify.prisma, operacao.id, marcasIniciais);
+      } catch (e) {
+        request.log.error(e, 'Falha ao carregar produtos iniciais do cadastro');
+      }
+      return reply.status(201).send({ ...respostaSessao(operacao, operador), produtos_iniciais: produtosIniciais });
     }
   );
 

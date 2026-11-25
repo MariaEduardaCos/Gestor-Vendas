@@ -175,3 +175,70 @@ describe('Produção: sem atalhos de desenvolvimento', () => {
     }
   });
 });
+
+describe('Cadastro já com os produtos mais vendidos', () => {
+  const app = buildApp({ prisma });
+  const MARCA = 'Marca Teste Vitrine';
+  const CHAVE = 'marca teste vitrine';
+
+  beforeAll(async () => {
+    await prisma.produtoReferencia.deleteMany({ where: { marca_chave: CHAVE } });
+    // 70 produtos gravados fora de ordem: a conta nova deve receber os 60 primeiros da vitrine.
+    for (let i = 70; i >= 1; i--) {
+      await prisma.produtoReferencia.create({
+        data: {
+          id: `ref-vitrine-${i}`,
+          marca_chave: CHAVE,
+          marca_nome: MARCA,
+          chave: `cod:${10000 + i}`,
+          nome: `Produto ${i}`,
+          codigo_revista: String(10000 + i),
+          preco_sugerido_centavos: 1000 + i,
+          ciclo: 'Ciclo teste',
+          origem: 'OFICIAL',
+          posicao: i
+        }
+      });
+    }
+  });
+
+  afterAll(async () => {
+    await limparOperacoes(prisma, await idsDasOperacoesComUsuario('teste.vitrine'));
+    await prisma.produtoReferencia.deleteMany({ where: { marca_chave: CHAVE } });
+    await app.close();
+  });
+
+  it('oferece a marca na configuração da tela de entrada', async () => {
+    const config = (await app.inject({ method: 'GET', url: '/api/auth/config' })).json();
+    expect(config.marcas_iniciais).toContainEqual({ marca: MARCA, produtos: 60 });
+  });
+
+  it('cria a marca e os 60 primeiros produtos da vitrine, ignorando marca sem catálogo', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/cadastro',
+      payload: { nome_negocio: 'Revenda Vitrine', nome: 'Bia', usuario: 'teste.vitrine.bia', pin: '2580', marcas_iniciais: [MARCA, 'Marca Que Nao Existe'] }
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().produtos_iniciais).toEqual({ [MARCA]: 60 });
+
+    const [operacaoId] = await idsDasOperacoesComUsuario('teste.vitrine');
+    const marcas = await prisma.marca.findMany({ where: { operacao_id: operacaoId } });
+    expect(marcas.map((m) => m.nome)).toEqual([MARCA]);
+    const produtos = await prisma.produto.findMany({ where: { operacao_id: operacaoId } });
+    expect(produtos).toHaveLength(60);
+    const codigos = produtos.map((p) => Number(p.codigo_revista));
+    expect(Math.max(...codigos)).toBe(10060);
+    expect(produtos.find((p) => p.codigo_revista === '10001')).toMatchObject({ nome: 'Produto 1', preco_venda_centavos: 1001 });
+  });
+
+  it('sem marcas escolhidas, cria a conta vazia como antes', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/cadastro',
+      payload: { nome_negocio: 'Revenda Vazia', nome: 'Cris', usuario: 'teste.vitrine.cris', pin: '2580' }
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().produtos_iniciais).toEqual({});
+  });
+});

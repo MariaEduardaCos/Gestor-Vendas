@@ -31,7 +31,7 @@ export async function carregarCatalogoOficial(
   let atualizados = 0;
 
   await db.$transaction(async (tx) => {
-    for (const l of linhas) {
+    for (const [indice, l] of linhas.entries()) {
       const chave = chaveProdutoCatalogo(l);
       const existente = await tx.produtoReferencia.findUnique({ where: { marca_chave_chave: { marca_chave: marcaChave, chave } } });
       const dados = {
@@ -43,7 +43,8 @@ export async function carregarCatalogoOficial(
         imagem_url: l.imagemUrl ?? existente?.imagem_url ?? null,
         preco_sugerido_centavos: l.precoVendaCentavos,
         ciclo: cicloLimpo,
-        origem: 'OFICIAL'
+        origem: 'OFICIAL',
+        posicao: indice + 1
       };
       if (existente) {
         await tx.produtoReferencia.update({ where: { id: existente.id }, data: dados });

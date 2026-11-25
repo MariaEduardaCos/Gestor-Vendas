@@ -438,12 +438,15 @@ model ProdutoReferencia {
   ciclo                   String
   /// "OFICIAL": carga da campanha feita pela administração do sistema; "COMUNIDADE": revendedoras
   origem                  String   @default("COMUNIDADE")
+  /// Ordem do produto na vitrine da marca (1 = primeiro). Serve de "mais vendidos" no cadastro.
+  posicao                 Int?
   contribuicoes           Int      @default(1)
   atualizado_em           DateTime @updatedAt
 
   @@unique([marca_chave, chave])
   @@index([codigo_barras])
   @@index([marca_chave, codigo_revista])
+  @@index([marca_chave, origem, posicao])
   @@map("produtos_referencia")
 }
 
